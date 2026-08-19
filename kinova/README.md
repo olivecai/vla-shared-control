@@ -27,5 +27,16 @@ catkin_make
 source devel/setup.bash
 ```
 
-Then you can launch the ros nodes:
-`roslaunch kortex_bringup kortex_bringup.launch`
+Now if you would like to run the actual robot and ROS nodes:
+7. Turn on the Kinova.
+8. Launch the robot driver `roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.128.1.127`
+> example output:
+    [INFO] [1787172238.776892559]: State changed from INITIALIZING to IDLE
+
+    [INFO] [1787172238.782742997]: -------------------------------------------------
+    [INFO] [1787172238.782775029]: Initializing Kortex Driver's services...
+    [INFO] [1787172240.872538225]: Kortex Driver's services initialized correctly.
+    [INFO] [1787172240.872582046]: -------------------------------------------------
+    [INFO] [1787172241.074417166]: The Kortex driver has been initialized correctly!
+
+9. In a seperate container terminal: run your script using rosrun `rosrun kinova_basic_tests test1.py` 

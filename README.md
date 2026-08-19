@@ -8,4 +8,11 @@ For tractability, there exists four seperate directories:
 - shared_control
 - kinova
 
-The directories 'vla' and 'human_control' should be 
+The code in directories 'vla' and 'human_control' output ONLY VLA actions/confidence/metadata and human control actions/confidence/metadata (aka teleop) respectively.
+
+The code in directory 'shared_control' takes input as vla output and human_control output, and outputs the shared control actions/confidence/metadata.
+
+The code in 'kinova' reads from the ROS control output nodes and outputs real robot actions.
+
+This structure ensures that computations and dataflow is not too messy!!!
+
