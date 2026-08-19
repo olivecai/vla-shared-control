@@ -4,9 +4,33 @@
 June 23 2025
 
 Connect to camera
-PUBLISH to topic '/cameras/camid' the capture as a Ros Image every 0.1 second.
-SUBSCRIBE to the topic 'visual_servoing', CALLBACK release camera and end capture.
+convert frame from BGR to grayscale
+PUBLISH to two topics:
+1. topic '/cameras/cam{id}' images as Image message
+2. topic '/cam_id' the camera id as Int32 message
 
+Usage:
+```
+source /home/user/kinova/catkin_ws/devel/setup.bash
+
+# In one terminal, start the camera node:
+rosrun persistent_status camera_node.py _cam_id:=0
+
+# In another terminal, view the images:
+rosrun image_view image_view image:=/cameras/cam0
+```
+
+Check the rostopic:
+```
+# List available topics
+rostopic list
+
+# View the raw image topic
+rostopic echo /cameras/cam0
+
+# Get info about the topic
+rostopic info /cameras/cam0
+```
 '''
 
 import sys

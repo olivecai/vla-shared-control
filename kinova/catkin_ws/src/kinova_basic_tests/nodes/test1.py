@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
 
+'''
+August 19 2026
+
+Simple script to just check connection with the Kinova. To run this script,
+open two terminals in the Docker container.
+In one terminal from /home/user/kinova: `roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.128.1.127`
+In the other terminal from /home/user/kinova: `rosrun kinova_basic_tests test1.py `
+'''
+
 import numpy as np
 import rospy
 
