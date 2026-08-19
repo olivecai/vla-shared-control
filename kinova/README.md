@@ -4,6 +4,8 @@
 
 2. cd into the repository vla-shared-control
 
+3. `git submodule init; git submodule update`
+
 3. `cd kinova`
 
 4. `docker exec -it vla_shared_control bash` to enter the Docker container.
