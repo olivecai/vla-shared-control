@@ -1,0 +1,6 @@
+numpy
+matplotlib
+libtmux
+opencv-python
+conan==1.59
+sympy
