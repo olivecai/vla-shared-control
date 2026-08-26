@@ -16,3 +16,8 @@ The code in 'kinova' reads from the ROS control output nodes and outputs real ro
 
 This structure ensures that computations and dataflow is not too messy!!!
 
+
+
+
+python3 scripts/convert_unified_to_lerobot_v2.py kinova-diffusion/data/my-robot-dataset <out_dir> --repo-id my-username/my-robot-dataset
+ 
