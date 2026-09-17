@@ -16,9 +16,11 @@ Writes one folder per episode under --out-dir:
         cam{id}/000000.jpg ...  -- one RGB frame per timestep, per camera
 
 Usage:
-    rosrun robot_mainframe camera_node.py _cam_id:=0   # in another terminal
-    rosrun robot_mainframe robot_state_node.py         # in another terminal
-    # initialize robot controller (probably joystick that publishes to driver node)
+    rosrun robot_mainframe camera_node.py _cam_id:=0     # in another terminal
+    rosrun robot_mainframe robot_state_node.py           # in another terminal
+    rosrun robot_mainframe driver_subscriber.py          # in another terminal, drives the arm
+    rosrun joy joy_node _dev:=/dev/input/js0             # in another terminal, reads the xbox controller
+    rosrun robot_mainframe driver_publisher.py           # in another terminal, joystick -> /driver/*
     python3 record.py --out-dir vla/data --cam-ids 0 --hz 5
 """
 import argparse

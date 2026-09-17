@@ -1,5 +1,6 @@
-ros-noetic-rviz 
+ros-noetic-rviz
 ros-noetic-xacro
+ros-noetic-joy
 ros-noetic-tf2-tools
 ros-noetic-rqt
 git 

@@ -12,13 +12,13 @@ Writes:
     /driver/joint_state  (sensor_msgs/JointState) -- absolute joint target
     /driver/gripper_state (std_msgs/Float32)      -- absolute gripper target (0=open, 100=closed)
                                                       Both consumed by
-                                                      robot_mainframe/nodes/driver_node.py
+                                                      robot_mainframe/nodes/driver_subscriber.py
                                                       (the only node allowed to move the arm).
 
 Usage:
     rosrun robot_mainframe camera_node.py _cam_id:=0    # in another terminal
     rosrun robot_mainframe robot_state_node.py          # in another terminal
-    rosrun robot_mainframe driver_node.py               # in another terminal
+    rosrun robot_mainframe driver_subscriber.py               # in another terminal
     python3 inference.py --checkpoint vla/checkpoints/kinova-lora --instruction "pick up the cup"
 """
 import argparse

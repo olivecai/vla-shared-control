@@ -36,7 +36,7 @@ Needs a CUDA GPU (bf16 LoRA fine-tuning of the 7B model fits on ~24GB). Saves a 
 ```
 rosrun robot_mainframe camera_node.py _cam_id:=0
 rosrun robot_mainframe robot_state_node.py
-rosrun robot_mainframe driver_node.py
+rosrun robot_mainframe driver_subscriber.py
 python3 vla/inference.py --checkpoint vla/checkpoints/kinova-lora --instruction "pick up the cup"
 ```
 
