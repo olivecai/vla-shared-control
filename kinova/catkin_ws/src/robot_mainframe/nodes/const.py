@@ -1,0 +1,1 @@
+KINOVA_DOF=7

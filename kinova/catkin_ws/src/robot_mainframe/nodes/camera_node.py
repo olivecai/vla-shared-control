@@ -2,9 +2,9 @@
 
 '''
 June 23 2025
+Updated Sep 17 2026 - images published as RGB for VLA use (previously was publish as grayscale for visual servoing)
 
 Connect to camera
-convert frame from BGR to grayscale
 PUBLISH to two topics:
 1. topic '/cameras/cam{id}' images as Image message
 2. topic '/cam_id' the camera id as Int32 message
@@ -14,7 +14,7 @@ Usage:
 source /home/user/kinova/catkin_ws/devel/setup.bash
 
 # In one terminal, start the camera node:
-rosrun persistent_status camera_node.py _cam_id:=0
+rosrun robot_mainframe camera_node.py _cam_id:=0
 
 # In another terminal, view the images:
 rosrun image_view image_view image:=/cameras/cam0
@@ -41,6 +41,8 @@ import numpy as np
 
 from sensor_msgs.msg import Image # ROS Image message 
 from std_msgs.msg import Int32
+
+from const import *
 
 # create a camera node that publishes a ros message image every second.
 
@@ -97,9 +99,8 @@ class CameraNode:
             rospy.logwarn(f"Couldn't get image frame for camera {self.cam_id}")
             return
         
-        #convert the BGR frame to a grayscale image to send through the ros message.
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        rosImage = self.bridge.cv2_to_imgmsg(cvim=frame, encoding="mono8") #cv2_to_imgmsg returns a full Image message already
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        rosImage = self.bridge.cv2_to_imgmsg(cvim=frame, encoding="rgb8") #cv2_to_imgmsg returns a full Image message already
         rosImage.header.frame_id = f"{self.cam_id}"
 
         self.cap_pub.publish(rosImage)

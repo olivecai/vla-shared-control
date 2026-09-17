@@ -1,0 +1,7 @@
+# Extra packages needed by train.py / inference.py on top of the ROS env
+# (numpy, opencv-python, cv_bridge, rospy are assumed to already be set up per kinova/requirements.txt).
+torch>=2.1
+transformers>=4.40
+accelerate>=0.30
+peft>=0.10
+pillow
