@@ -113,9 +113,9 @@ catkin_package(
 
 catkin_install_python(PROGRAMS
   nodes/camera_node.py
-  nodes/tracking_node.py
-  nodes/visual_servoing_node.py
-  nodes/consolidate_cams_node.py
+  nodes/robot_state_node.py
+  nodes/driver_publisher.py
+  nodes/driver_subscriber.py
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
