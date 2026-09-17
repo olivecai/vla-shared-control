@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(visualservo)
+project(robot_mainframe)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -52,8 +52,6 @@ find_package(catkin REQUIRED COMPONENTS
  add_message_files(
    FILES
    image_point.msg
-   points_array.msg
-   vs_info.msg
  )
 
 ## Generate services in the 'srv' folder

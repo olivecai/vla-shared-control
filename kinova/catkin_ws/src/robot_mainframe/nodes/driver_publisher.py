@@ -40,8 +40,10 @@ class XboxController: #name is XBOX_TELEOP
         self.cartesian_velocity_pub = rospy.Publisher('/driver/cartesian_velocity', Twist, queue_size=10)
         self.gripper_pub = rospy.Publisher('/driver/gripper_state', Float32, queue_size=10)
         self.home_trigger_pub = rospy.Publisher('/driver/home_trigger', Empty, queue_size=1)
+        self.record_toggle_pub = rospy.Publisher('/driver/record_toggle', Empty, queue_size=1)
         self._prev_home_button = 0
         self._prev_mode_button = 0
+        self._prev_record_button = 0
         self.mode = 0  # 0 = cartesian velocity (translation), 1 = robot orientation (rotation)
 
         rospy.Subscriber('/joy', Joy, self._joy_callback)
@@ -87,6 +89,10 @@ class XboxController: #name is XBOX_TELEOP
         if msg.buttons[6] and not self._prev_home_button:  # Start (rising edge so only press once)
             self.home_trigger_pub.publish(Empty())
         self._prev_home_button = msg.buttons[6]
+
+        if msg.buttons[7] and not self._prev_record_button:  # Back, rising edge only
+            self.record_toggle_pub.publish(Empty())
+        self._prev_record_button = msg.buttons[7]
 
 
 class KeyboardController:

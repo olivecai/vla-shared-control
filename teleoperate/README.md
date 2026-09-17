@@ -10,6 +10,7 @@ impl in `kinova/catkin_ws/src/robot_mainframe/nodes/driver_publisher.py` (`XboxC
 | LB           | Open gripper                              |
 | RB           | Close gripper                             |
 | Start        | Send arm home       |
+| Back         | Start/stop recording episode (vla/record.py) |
 
 ## mode 0 cartesian velocity (translation)
 
@@ -29,4 +30,4 @@ impl in `kinova/catkin_ws/src/robot_mainframe/nodes/driver_publisher.py` (`XboxC
 | Y / B             | Roll (rotate about z): Y = +, B = -  |
 | Left stick, LT/RT | No effect (translation is zeroed) |
 
-Unused: X, Back, stick-click buttons.
+Unused: X, stick-click buttons.

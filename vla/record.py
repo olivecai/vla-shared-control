@@ -3,9 +3,10 @@
 Record teleop demonstrations for OpenVLA fine-tuning (https://github.com/openvla/openvla).
 
 Reads:
-    /cameras/cam{id}   (sensor_msgs/Image)
-    /joint_states      (sensor_msgs/JointState)
-    /gripper_state     (std_msgs/Float32)
+    /cameras/cam{id}        (sensor_msgs/Image)
+    /joint_states           (sensor_msgs/JointState)
+    /gripper_state          (std_msgs/Float32)
+    /driver/record_toggle   (std_msgs/Empty) -- xbox controller's Back button starts/stops an episode
 
 Writes one folder per episode under --out-dir:
     episode_<timestamp>/
@@ -15,7 +16,7 @@ Writes one folder per episode under --out-dir:
         timestamps.npy          -- (T,) float64 array of ROS timestamps
         cam{id}/000000.jpg ...  -- one RGB frame per timestep, per camera
 
-Usage:
+USAGE::
     rosrun robot_mainframe camera_node.py _cam_id:=0     # in another terminal
     rosrun robot_mainframe robot_state_node.py           # in another terminal
     rosrun robot_mainframe driver_subscriber.py          # in another terminal, drives the arm
@@ -25,6 +26,7 @@ Usage:
 """
 import argparse
 import os
+import threading
 import time
 
 import cv2
@@ -34,7 +36,7 @@ import rospy
 
 
 from sensor_msgs.msg import JointState, Image
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Empty
 
 
 class Recorder:
@@ -47,11 +49,13 @@ class Recorder:
         self.latest_gripper = None
         self.active = False
         self.frames = []  # list of {"t": float, "joints": np.ndarray, "gripper": float, "images": {cam_id: np.ndarray}}
+        self._toggle_event = threading.Event()
 
         for cam_id in cam_ids:
             rospy.Subscriber(f"/cameras/cam{cam_id}", Image, self._image_cb, callback_args=cam_id)
         rospy.Subscriber("/joint_states", JointState, self._joint_cb)
         rospy.Subscriber("/gripper_state", Float32, self._gripper_cb)
+        rospy.Subscriber("/driver/record_toggle", Empty, self._toggle_cb)
 
         rospy.loginfo("Waiting for first camera image(s), joint state, and gripper state ...")
         for cam_id in cam_ids:
@@ -71,6 +75,14 @@ class Recorder:
 
     def _gripper_cb(self, msg):
         self.latest_gripper = msg.data
+
+    def _toggle_cb(self, msg):
+        self._toggle_event.set()
+
+    def wait_for_toggle(self):
+        """Blocks until the xbox controller's Back button (start/stop) is pressed."""
+        self._toggle_event.wait()
+        self._toggle_event.clear()
 
     def _timer_cb(self, event):
         if not self.active:
@@ -125,6 +137,7 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     recorder = Recorder(args.cam_ids, args.hz)
 
+    
     instruction = ""
     while not rospy.is_shutdown():
         typed = input(f"\nInstruction [{instruction or 'none yet'}] (Enter to reuse, 'quit' to exit): ").strip()
@@ -136,9 +149,11 @@ def main():
             print("Need an instruction before recording the first episode.")
             continue
 
-        input("Press Enter to START recording (move the arm once recording starts) ...")
+        print("Press Back on the controller to START recording (move the arm once recording starts) ...")
+        recorder.wait_for_toggle()
         recorder.record_episode()
-        input("Recording ... press Enter to STOP this episode.")
+        print("Recording ... press Back again to STOP this episode.")
+        recorder.wait_for_toggle()
         frames = recorder.stop_episode()
 
         if len(frames) < 2:
