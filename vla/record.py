@@ -17,6 +17,16 @@ Writes one folder per episode under --out-dir:
         cam{id}/000000.jpg ...  -- one RGB frame per timestep, per camera
 
 USAGE::
+    cd kinova 
+
+    docker compose build
+    docker compose up -d 
+
+     # in each terminal...
+    docker exec -it vla_shared_control bash
+
+    roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.168.1.127
+
     rosrun robot_mainframe camera_node.py _cam_id:=0     # in another terminal
     rosrun robot_mainframe robot_state_node.py           # in another terminal
     rosrun robot_mainframe driver_subscriber.py          # in another terminal, drives the arm

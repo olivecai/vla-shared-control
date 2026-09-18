@@ -31,7 +31,7 @@ Now if you would like to run the actual robot and ROS nodes:
 
 7. Turn on the Kinova.
 
-8. Launch the robot driver `roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.128.1.127`
+8. Launch the robot driver `roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.168.1.127`
 
 > example output:
     [INFO] [1787172238.776892559]: State changed from INITIALIZING to IDLE
