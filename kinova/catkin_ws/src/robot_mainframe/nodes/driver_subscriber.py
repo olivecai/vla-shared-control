@@ -7,6 +7,8 @@ DRIVES actual kinova movement; listens to /driver
 
 This is the ONLY file in the entire repo that is allowed to touch the kinova joints!
 '''
+import os
+import sys
 import rospy
 from sensor_msgs.msg import JointState
 from kortex_bringup import KinovaGen3
@@ -14,6 +16,8 @@ from std_msgs.msg import Float32, Empty
 from geometry_msgs.msg import Twist
 import numpy as np
 
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from const import *
 
 class DriverNode:
@@ -70,9 +74,12 @@ class DriverNode:
             rospy.loginfo(f"WARNING: Kinova not found.")
 
     def callback_home_trigger(self, data: Empty):
+
         rospy.loginfo(f"driver_subscriber::callback_home_trigger: Received home trigger")
         if self.kinova:
-            self.kinova.go_home()
+            angles = np.deg2rad(np.array([11, 345, 170, 219, 5, 320, 80])) #as of Aug 19 2026, verified this is good home position
+            success = self.kinova.send_joint_angles(angles)
+            print("Kinova sent home. Joints:", self.kinova.position)
         else:
             rospy.loginfo(f"WARNING: Kinova not found.")
 

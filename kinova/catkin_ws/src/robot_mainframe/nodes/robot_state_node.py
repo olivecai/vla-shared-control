@@ -4,10 +4,15 @@ Sep 16 2026
 
 READS kinova joint state 
 '''
-from const import *
+import os
+import sys
 import rospy
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float32
+
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from const import *
 from kortex_bringup import KinovaGen3
 from kortex_driver.msg import BaseCyclic_Feedback
 import numpy as np

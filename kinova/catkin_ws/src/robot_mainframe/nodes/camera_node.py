@@ -36,12 +36,14 @@ rostopic info /cameras/cam0
 import sys
 import rospy
 import cv2
-import cv_bridge
 import numpy as np
 
 from sensor_msgs.msg import Image # ROS Image message 
 from std_msgs.msg import Int32
 
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from const import *
 
 # create a camera node that publishes a ros message image every second.
@@ -73,8 +75,6 @@ class CameraNode:
             rospy.logerr("Error: Could not open video source.")
             exit()
 
-        self.bridge = cv_bridge.CvBridge()
-
         self.cap_pub = rospy.Publisher(f"/cameras/cam{self.cam_id}", Image, queue_size=10)
         self.id_pub = rospy.Publisher("/cam_id", Int32, queue_size=1)
         self.stop_capture = False
@@ -100,7 +100,13 @@ class CameraNode:
             return
         
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        rosImage = self.bridge.cv2_to_imgmsg(cvim=frame, encoding="rgb8") #cv2_to_imgmsg returns a full Image message already
+
+        # build the ros image message
+        rosImage = Image()
+        rosImage.height, rosImage.width = frame.shape[:2]
+        rosImage.encoding = "rgb8"
+        rosImage.step = frame.shape[1] * 3
+        rosImage.data = frame.tobytes()
         rosImage.header.frame_id = f"{self.cam_id}"
 
         self.cap_pub.publish(rosImage)

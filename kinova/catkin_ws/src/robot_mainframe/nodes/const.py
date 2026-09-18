@@ -5,7 +5,7 @@ XBOX_TELEOP = "XBOX_TELEOP"
 KEYBOARD_TELEOP = "KEYBOARD_TELEOP"
 
 # Per-axis max cartesian velocity for xbox teleop (m/s for linear, rad/s for angular).
-# TX/RZ ported from the other project's teleop; the rest are untuned placeholders.
+# TX/RZ shld be ok TODO finetune others
 MAXV_TX = 0.05
 MAXV_TY = 0.05
 MAXV_TZ = 0.05

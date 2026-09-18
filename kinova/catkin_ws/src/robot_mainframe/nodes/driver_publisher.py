@@ -1,8 +1,13 @@
+import os
+import sys
 import rospy
 from sensor_msgs.msg import JointState, Joy
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Float32, Empty
 import numpy as np
+
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from const import *
 
 class Driver:

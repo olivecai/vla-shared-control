@@ -1,10 +1,10 @@
 # Set up Kinova Docker and catkin packages...
 
+NOTE: ENSURE YOU ARE CONNECTED TO THE ROBOT VISION WIFI!!!!! Otherwise kinova wont properly initialize!!!
+
 1. clone repository https://github.com/olivecai/vla-shared-control if you haven't already: `git clone git@github.com:olivecai/vla-shared-control.git`
 
 2. cd into the repository vla-shared-control
-
-3. `git submodule init; git submodule update`
 
 3. `cd kinova`
 
@@ -28,8 +28,11 @@ source devel/setup.bash
 ```
 
 Now if you would like to run the actual robot and ROS nodes:
+
 7. Turn on the Kinova.
+
 8. Launch the robot driver `roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.128.1.127`
+
 > example output:
     [INFO] [1787172238.776892559]: State changed from INITIALIZING to IDLE
 

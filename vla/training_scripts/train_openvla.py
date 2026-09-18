@@ -15,7 +15,7 @@ Requires a CUDA GPU. bf16 LoRA fine-tuning of the 7B model fits on a single ~24G
 See requirements.txt for the extra (non-ROS) Python packages this needs.
 
 Usage:
-    python3 train.py --data-dir vla/data --output-dir vla/checkpoints/kinova-lora
+    python3 vla/training_scripts/train_openvla.py --data-dir vla/data --output-dir vla/checkpoints/kinova-lora
 """
 import argparse
 import glob
