@@ -26,6 +26,10 @@ python3 scripts/convert_unified_to_lerobot_v2.py kinova-diffusion/data/my-robot-
 
  SEP 17 
 
+git clone https://github.com/NVIDIA/Isaac-GR00T.git
+conda create -n groot python=3.12
+conda activate groot
+ cd ~/Isaac-GR00T
  pip install torch==2.9.0 torchvision==0.24.0
 pip install flash-attn==2.8.3 --no-build-isolation
 pip install -e .
