@@ -13,6 +13,10 @@ MAXV_RX = 0.5
 MAXV_RY = 0.5
 MAXV_RZ = 0.5
 
+# Gripper rate for xbox teleop (percent/sec, 0=open, 100=closed) -- holding LB/RB steps the
+# gripper toward open/closed at this rate instead of snapping straight to the extreme.
+GRIPPER_RATE = 20.0
+
 # Per-joint position limits (radians), index 7 is the gripper (0=open, 1=closed).
 JOINT_LIMIT = {
     0: [-3.141592653589793, 3.141592653589793],
@@ -24,3 +28,6 @@ JOINT_LIMIT = {
     6: [-3.141592653589793, 3.141592653589793],
     7: [0, 1],
 }
+
+HOME_RAW_DEGREES = [11, 345, 170, 219, 5, 320, 80]
+    

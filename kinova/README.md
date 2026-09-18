@@ -42,4 +42,4 @@ Now if you would like to run the actual robot and ROS nodes:
     [INFO] [1787172240.872582046]: -------------------------------------------------
     [INFO] [1787172241.074417166]: The Kortex driver has been initialized correctly!
 
-9. In a seperate container terminal: run your script using rosrun `rosrun kinova_basic_tests test1.py` 
+9. In a seperate container terminal: run your script using rosrun `rosrun kinova_basic_tests test1.py` (see the vla/record.py script for )

@@ -17,21 +17,37 @@ Writes one folder per episode under --out-dir:
         cam{id}/000000.jpg ...  -- one RGB frame per timestep, per camera
 
 USAGE::
+    run the ./start_robot_session.sh
+
+    OR
+
+    
     cd kinova 
 
     docker compose build
     docker compose up -d 
 
-     # in each terminal...
+    
     docker exec -it vla_shared_control bash
-
     roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.168.1.127
 
+    docker exec -it vla_shared_control bash
     rosrun robot_mainframe camera_node.py _cam_id:=0     # in another terminal
+
+    docker exec -it vla_shared_control bash
     rosrun robot_mainframe robot_state_node.py           # in another terminal
+
+    docker exec -it vla_shared_control bash
     rosrun robot_mainframe driver_subscriber.py          # in another terminal, drives the arm
+
+    docker exec -it vla_shared_control bash
     rosrun joy joy_node _dev:=/dev/input/js0             # in another terminal, reads the xbox controller
+
+    docker exec -it vla_shared_control bash
     rosrun robot_mainframe driver_publisher.py           # in another terminal, joystick -> /driver/*
+
+    docker exec -it vla_shared_control bash 
+    cd ../vla
     python3 record.py --out-dir vla/data --cam-ids 0 --hz 5
 """
 import argparse

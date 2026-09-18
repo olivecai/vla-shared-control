@@ -3,9 +3,18 @@ import sys
 import rospy
 from sensor_msgs.msg import JointState, Joy
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Float32, Empty
+from std_msgs.msg import Float32, Empty, Bool
 import numpy as np
 
+
+'''
+Sep 18 2026
+
+This file has all the different robot control methods, like XBOX_TELEOP etc!!!
+
+This node publishes driving commands to the driver_subscriber nodes
+
+'''
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from const import *
@@ -42,8 +51,8 @@ class XboxController: #name is XBOX_TELEOP
     the kinova object directly).
     '''
     def __init__(self):
-        self.cartesian_velocity_pub = rospy.Publisher('/driver/cartesian_velocity', Twist, queue_size=10)
-        self.gripper_pub = rospy.Publisher('/driver/gripper_state', Float32, queue_size=10)
+        self.cartesian_velocity_pub = rospy.Publisher('/driver/cartesian_velocity', Twist, queue_size=1)
+        self.gripper_pub = rospy.Publisher('/driver/gripper_state', Float32, queue_size=1)
         self.home_trigger_pub = rospy.Publisher('/driver/home_trigger', Empty, queue_size=1)
         self.record_toggle_pub = rospy.Publisher('/driver/record_toggle', Empty, queue_size=1)
         self._prev_home_button = 0
@@ -51,10 +60,32 @@ class XboxController: #name is XBOX_TELEOP
         self._prev_record_button = 0
         self.mode = 0  # 0 = cartesian velocity (translation), 1 = robot orientation (rotation)
 
+        # Gripper state is tracked from /gripper_state (actual hardware feedback, published by
+        # robot_state_node.py) rather than a locally-accumulated value, so LB/RB always step
+        # relative to where the gripper really is instead of drifting out of sync over time.
+        self.gripper_state = 0.0
+        self._last_gripper_time = None
+        rospy.Subscriber('/gripper_state', Float32, self._gripper_state_callback)
+
+        # driver_subscriber.py sets this True while it's mid-way through a blocking,
+        # action-based command (currently just homing) -- an active cartesian_velocity stream
+        # conflicts with an in-progress trajectory action, so pause streaming while busy.
+        self.busy = False
+        rospy.Subscriber('/driver/busy', Bool, self._busy_callback)
+
         rospy.Subscriber('/joy', Joy, self._joy_callback)
         rospy.loginfo("XboxController: subscribed to /joy")
 
+    def _gripper_state_callback(self, msg: Float32):
+        self.gripper_state = msg.data
+
+    def _busy_callback(self, msg: Bool):
+        self.busy = msg.data
+
     def _joy_callback(self, msg: Joy):
+        '''
+        mode 0 and mode 1 exist but are not implemented - sep 18 2026
+        '''
         # left stick -> x/y translation, triggers (axes 2, 5) -> z translation,
         # right stick -> x/y rotation, Y(1)/B(3) -> roll. Ported from the other
         # project's joy_callback (joy_type == 1 branch).
@@ -74,33 +105,42 @@ class XboxController: #name is XBOX_TELEOP
             rospy.loginfo(f"XboxController: mode={self.mode} ({'cartesian velocity' if self.mode == 0 else 'orientation'})")
         self._prev_mode_button = msg.buttons[0]
 
-        # mode 0: translation only (cartesian velocity), mode 1: rotation only (robot orientation)
         twist = Twist()
-        if self.mode == 0:
-            twist.linear.x = axes_vector[0] * MAXV_TX
-            twist.linear.y = axes_vector[1] * MAXV_TY
-            twist.linear.z = axes_vector[2] * MAXV_TZ
-        else:
-            twist.angular.x = axes_vector[3] * MAXV_RX
-            twist.angular.y = axes_vector[4] * MAXV_RY
-            twist.angular.z = axes_vector[5] * MAXV_RZ
-        self.cartesian_velocity_pub.publish(twist)
+        
+        twist.linear.x = axes_vector[0] * MAXV_TX
+        twist.linear.y = axes_vector[1] * MAXV_TY
+        twist.linear.z = axes_vector[2] * MAXV_TZ
+    
+        twist.angular.x = axes_vector[3] * MAXV_RX
+        twist.angular.y = axes_vector[4] * MAXV_RY
+        twist.angular.z = axes_vector[5] * MAXV_RZ
+        if not self.busy:
+            self.cartesian_velocity_pub.publish(twist)
 
+        # LB/RB step the gripper toward open/closed at GRIPPER_RATE percent/sec while held,
+        # instead of snapping straight to the extreme.
+        now = rospy.Time.now()
+        dt = (now - self._last_gripper_time).to_sec() if self._last_gripper_time else 0.0
+        self._last_gripper_time = now
         if msg.buttons[4]:  # LB -> open gripper
-            self.gripper_pub.publish(Float32(0.0))
+            target = max(0.0, self.gripper_state - GRIPPER_RATE * dt)
+            self.gripper_pub.publish(Float32(target))
         elif msg.buttons[5]:  # RB -> close gripper
-            self.gripper_pub.publish(Float32(100.0))
+            target = min(100.0, self.gripper_state + GRIPPER_RATE * dt)
+            self.gripper_pub.publish(Float32(target))
 
-        if msg.buttons[6] and not self._prev_home_button:  # Start (rising edge so only press once)
+        if msg.buttons[6] and not self._prev_home_button:  
             self.home_trigger_pub.publish(Empty())
         self._prev_home_button = msg.buttons[6]
 
-        if msg.buttons[7] and not self._prev_record_button:  # Back, rising edge only
+        if msg.buttons[7] and not self._prev_record_button:  
             self.record_toggle_pub.publish(Empty())
         self._prev_record_button = msg.buttons[7]
+     
 
 
 class KeyboardController:
+    ''' this is to show that any kind of controller can be impl'''
     def __init__(self):
         pass
 
