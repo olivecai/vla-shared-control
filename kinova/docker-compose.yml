@@ -15,4 +15,5 @@ services:
     volumes:
       - ../kinova:/home/user/kinova
       - ../vla:/home/user/vla
+      - ../kortex_teleop:/home/user/kortex_teleop
       - /tmp/.X11-unix:/tmp/.X11-unix
