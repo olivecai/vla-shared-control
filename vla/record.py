@@ -18,10 +18,14 @@ Writes one folder per episode under --out-dir:
 
 USAGE::
     run the ./start_robot_session.sh
+    # seperate terminal:
+    docker exec -it vla_shared_control bash 
+    cd ../vla
+    python3 record.py --out-dir vla/data --cam-ids 0 --hz 5
 
     OR
 
-    
+
     cd kinova 
 
     docker compose build
@@ -45,6 +49,8 @@ USAGE::
 
     docker exec -it vla_shared_control bash
     rosrun robot_mainframe driver_publisher.py           # in another terminal, joystick -> /driver/*
+
+    #now for the record script
 
     docker exec -it vla_shared_control bash 
     cd ../vla

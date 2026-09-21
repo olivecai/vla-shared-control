@@ -52,20 +52,13 @@ class XboxController: #name is XBOX_TELEOP
     '''
     def __init__(self):
         self.cartesian_velocity_pub = rospy.Publisher('/driver/cartesian_velocity', Twist, queue_size=1)
-        self.gripper_pub = rospy.Publisher('/driver/gripper_state', Float32, queue_size=1)
+        self.gripper_velocity_pub = rospy.Publisher('/driver/gripper_velocity', Float32, queue_size=1)
         self.home_trigger_pub = rospy.Publisher('/driver/home_trigger', Empty, queue_size=1)
         self.record_toggle_pub = rospy.Publisher('/driver/record_toggle', Empty, queue_size=1)
         self._prev_home_button = 0
         self._prev_mode_button = 0
         self._prev_record_button = 0
         self.mode = 0  # 0 = cartesian velocity (translation), 1 = robot orientation (rotation)
-
-        # Gripper state is tracked from /gripper_state (actual hardware feedback, published by
-        # robot_state_node.py) rather than a locally-accumulated value, so LB/RB always step
-        # relative to where the gripper really is instead of drifting out of sync over time.
-        self.gripper_state = 0.0
-        self._last_gripper_time = None
-        rospy.Subscriber('/gripper_state', Float32, self._gripper_state_callback)
 
         # driver_subscriber.py sets this True while it's mid-way through a blocking,
         # action-based command (currently just homing) -- an active cartesian_velocity stream
@@ -75,9 +68,6 @@ class XboxController: #name is XBOX_TELEOP
 
         rospy.Subscriber('/joy', Joy, self._joy_callback)
         rospy.loginfo("XboxController: subscribed to /joy")
-
-    def _gripper_state_callback(self, msg: Float32):
-        self.gripper_state = msg.data
 
     def _busy_callback(self, msg: Bool):
         self.busy = msg.data
@@ -117,17 +107,21 @@ class XboxController: #name is XBOX_TELEOP
         if not self.busy:
             self.cartesian_velocity_pub.publish(twist)
 
-        # LB/RB step the gripper toward open/closed at GRIPPER_RATE percent/sec while held,
-        # instead of snapping straight to the extreme.
-        now = rospy.Time.now()
-        dt = (now - self._last_gripper_time).to_sec() if self._last_gripper_time else 0.0
-        self._last_gripper_time = now
+        # LB/RB command the gripper to move open/closed at GRIPPER_SPEED via Kinova's GRIPPER_SPEED
+        # mode (continuous velocity, not a position target -- see
+        # driver_subscriber.py::callback_gripper_velocity for why: computing "current position +
+        # delta" every tick is unstable when feedback lags an in-flight move, which is what
+        # caused the gripper to visibly reverse direction while still being held one way).
+        # Sign convention (positive=open, negative=close) matches the reference "other project"
+        # implementation this was ported from.
+        # Published every tick, like cartesian_velocity, so releasing reliably sends the stop (0).
         if msg.buttons[4]:  # LB -> open gripper
-            target = max(0.0, self.gripper_state - GRIPPER_RATE * dt)
-            self.gripper_pub.publish(Float32(target))
+            gripper_speed = GRIPPER_SPEED
         elif msg.buttons[5]:  # RB -> close gripper
-            target = min(100.0, self.gripper_state + GRIPPER_RATE * dt)
-            self.gripper_pub.publish(Float32(target))
+            gripper_speed = -GRIPPER_SPEED
+        else:
+            gripper_speed = 0.0
+        self.gripper_velocity_pub.publish(Float32(gripper_speed))
 
         if msg.buttons[6] and not self._prev_home_button:  
             self.home_trigger_pub.publish(Empty())

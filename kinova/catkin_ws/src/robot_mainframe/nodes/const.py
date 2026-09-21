@@ -13,9 +13,11 @@ MAXV_RX = 0.5
 MAXV_RY = 0.5
 MAXV_RZ = 0.5
 
-# Gripper rate for xbox teleop (percent/sec, 0=open, 100=closed) -- holding LB/RB steps the
-# gripper toward open/closed at this rate instead of snapping straight to the extreme.
-GRIPPER_RATE = 20.0
+# Gripper speed for xbox teleop, using Kinova's GRIPPER_SPEED mode (continuous velocity, not a
+# position target) -- holding LB/RB commands the gripper to move open/closed at this speed until
+# released. Magnitude matches MAXV_GR from the reference "other project" implementation this was
+# ported from (Kinova's GRIPPER_SPEED value is a small normalized speed, not a 0-100 percentage).
+GRIPPER_SPEED = 0.3
 
 # Per-joint position limits (radians), index 7 is the gripper (0=open, 1=closed).
 JOINT_LIMIT = {

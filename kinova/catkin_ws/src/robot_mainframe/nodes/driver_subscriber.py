@@ -9,9 +9,12 @@ This is the ONLY file in the entire repo that is allowed to touch the kinova joi
 '''
 import os
 import sys
+import threading
 import rospy
 from sensor_msgs.msg import JointState
 from kortex_bringup import KinovaGen3
+from kortex_driver.msg import Finger, GripperMode
+from kortex_driver.srv import SendGripperCommandRequest
 from std_msgs.msg import Float32, Empty, Bool
 from geometry_msgs.msg import Twist
 import numpy as np
@@ -38,6 +41,8 @@ class DriverNode:
         rospy.loginfo(f"Initialized Driver sub on topic /driver/joint_state")
         rospy.Subscriber('/driver/gripper_state', Float32, self.callback_gripper_state)
         rospy.loginfo(f"Initialized Driver sub on topic /driver/gripper_state")
+        rospy.Subscriber('/driver/gripper_velocity', Float32, self.callback_gripper_velocity)
+        rospy.loginfo(f"Initialized Driver sub on topic /driver/gripper_velocity")
         rospy.Subscriber('/driver/cartesian_velocity', Twist, self.callback_cartesian_velocity)
         rospy.loginfo(f"Initialized Driver sub on topic /driver/cartesian_velocity")
         rospy.Subscriber('/driver/home_trigger', Empty, self.callback_home_trigger)
@@ -49,13 +54,56 @@ class DriverNode:
         self.busy_pub = rospy.Publisher('/driver/busy', Bool, queue_size=1, latch=True)
         self.busy_pub.publish(Bool(False))
 
+        # send_gripper_command() blocks for 0.5s per call (kortex_bringup's own kinova_gen3.py),
+        # but driver_publisher.py streams a new gripper target on every /joy tick (~JOY_HZ times a
+        # second) while LB/RB is held. Processing each one inline in callback_gripper_state would
+        # both stall every other driver callback for that 0.5s AND queue up a large backlog of
+        # now-stale targets, which is what actually made the gripper feel jerky/slow. Instead,
+        # callback_gripper_state just records the latest requested target, and this background
+        # thread keeps sending whatever the FRESHEST target is, dropping the stale ones in between.
+        self._gripper_lock = threading.Lock()
+        self._gripper_target = None
+        threading.Thread(target=self._gripper_worker, daemon=True).start()
+
         rospy.spin()
+
+    def _send_gripper_position(self, fraction):
+        '''
+        kortex_bringup's KinovaGen3.send_gripper_command() now uses GRIPPER_SPEED mode (for
+        teleop, see callback_gripper_velocity below), so absolute-position control (used by VLA
+        inference/rollout via callback_gripper_state) needs its own GRIPPER_POSITION request
+        built directly here instead.
+        '''
+        req = SendGripperCommandRequest()
+        finger = Finger()
+        finger.finger_identifier = 0
+        finger.value = fraction
+        req.input.gripper.finger.append(finger)
+        req.input.mode = GripperMode.GRIPPER_POSITION
+        try:
+            self.kinova.send_gripper_command_srv(req)
+        except rospy.ServiceException:
+            rospy.logerr("driver_subscriber::_send_gripper_position: Failed to call SendGripperCommand")
+
+    def _gripper_worker(self):
+        last_sent = None
+        while not rospy.is_shutdown():
+            with self._gripper_lock:
+                target = self._gripper_target
+            if target is not None and target != last_sent and self.kinova:
+                self._send_gripper_position(target)
+                last_sent = target
+            else:
+                rospy.sleep(0.1)
 
     def callback_joint_state(self, data):
         rospy.loginfo(f"driver_subscriber::callback_joint_state: Received {data.position} from time {data.header.stamp}. Current time: {rospy.Time.now()}")
         if self.kinova:
-            positions = [np.clip(p, *JOINT_LIMIT[i]) for i, p in enumerate(data.position)]
-            self.kinova.send_joint_angles(positions)
+            # data.position is in radians (standard JointState convention) and JOINT_LIMIT is
+            # radians too, but kinova_gen3.py's send_joint_angles now expects degrees.
+            positions_rad = [np.clip(p, *JOINT_LIMIT[i]) for i, p in enumerate(data.position)]
+            positions_deg = np.degrees(positions_rad)
+            self.kinova.send_joint_angles(positions_deg)
         else:
             rospy.loginfo(f"WARNING: Kinova not found.")
 
@@ -63,9 +111,31 @@ class DriverNode:
         rospy.loginfo(f"driver_subscriber::callback_gripper_state: Receieved {data.data}")
         if self.kinova:
             # data.data is a percentage (0=open, 100=closed), matching /gripper_state;
-            # send_gripper_command expects a fraction (0.0=open, 1.0=closed).
+            # GRIPPER_POSITION expects a fraction (0.0=open, 1.0=closed). The actual (blocking)
+            # hardware call happens in _gripper_worker -- this just records the latest requested
+            # target so this callback returns immediately.
             fraction = np.clip(data.data / 100.0, *JOINT_LIMIT[7])
-            self.kinova.send_gripper_command(fraction)
+            with self._gripper_lock:
+                self._gripper_target = fraction
+        else:
+            rospy.loginfo(f"WARNING: Kinova not found.")
+
+    def callback_gripper_velocity(self, data: Float32):
+        '''
+        Continuous gripper speed control for teleop, as an alternative to the
+        callback_gripper_state/absolute-position path above. GRIPPER_POSITION requires
+        recomputing a "current position + delta" target every tick, which is unstable when
+        feedback lags behind an in-flight physical move (the target can undershoot where the
+        gripper is already heading, causing it to visibly reverse) -- GRIPPER_SPEED mode instead
+        just commands a continuous direction+speed with no target math, so there's nothing to
+        regress. kinova_gen3.py's send_gripper_command() now uses GRIPPER_SPEED natively (and
+        de-dupes identical repeated values), so this just forwards to it directly.
+
+        data.data: signed speed, -100 (open, full speed) .. 100 (close, full speed). Sign
+        convention per Kinova's Kortex API; flip it in driver_publisher.py if it's backwards.
+        '''
+        if self.kinova:
+            self.kinova.send_gripper_command(data.data)
         else:
             rospy.loginfo(f"WARNING: Kinova not found.")
 
@@ -85,32 +155,17 @@ class DriverNode:
         if self.kinova:
             self.busy_pub.publish(Bool(True))
             try:
-                # driver_publisher.py streams cartesian_velocity on every /joy tick (even at rest),
-                # so the arm is continuously in velocity-streaming mode. send_joint_angles uses an
-                # action-based waypoint trajectory, which conflicts with an active velocity stream --
-                # this is what causes the "uninitialized ServerGoalHandle" error and erratic motion.
-                # Explicitly zero the velocity stream and give the driver a moment to switch modes
-                # before starting the trajectory (kortex_bringup's own kinova_gen3.py flags this same
-                # requirement, though its disabled workaround used the buggier service-based call).
-                # /driver/busy (published True above, False in the finally block below) additionally
-                # tells driver_publisher.py to pause its own velocity streaming for the whole
-                # trajectory, not just this initial zeroing -- otherwise the very next /joy tick
-                # re-starts the conflict a moment later, mid-trajectory.
-                self.kinova.send_cartesian_velocity([0, 0, 0, 0, 0, 0])
-                rospy.sleep(0.1)
-
-                # As of Aug 19 2026, verified this is a good home position -- but the raw values
-                # here are unsigned 0-360 readings (as Kinova reports joint feedback regardless of
-                # whether a joint is continuous), while send_joint_angles/Kinova's trajectory
-                # validation expects each limited (non-continuous) joint's signed range. Joints
-                # 1, 3, 5 are limited to +-128.9/147.8/120.3 degrees, so their raw values (345, 219,
-                # 320) were rejected by Kinova's validation -- wrap to the equivalent signed angle.
-                raw_degrees = np.array([11, 345, 170, 219, 5, 320, 80])
-                signed_degrees = np.where(raw_degrees > 180, raw_degrees - 360, raw_degrees)
-                angles = np.deg2rad(signed_degrees)
-                success = self.kinova.send_joint_angles(angles)
+                # go_home() uses Kinova's own built-in Home action (a predefined action stored on
+                # the robot itself, ID #2) instead of hand-picked joint angles -- no more manual
+                # degree/radian or wraparound bookkeeping. It also zeroes joint velocity and sets
+                # going_home/movement_blocked internally, guarding send_joint_speeds_command --
+                # but that doesn't cover cartesian_velocity, which is what our joystick teleop
+                # actually streams, so /driver/busy (published True above, False in the finally
+                # block below) still does its job of pausing driver_publisher.py's velocity
+                # publishing for the whole trajectory, not just the start of it.
+                success = self.kinova.go_home()
                 if not success:
-                    rospy.logerr("driver_subscriber::callback_home_trigger: send_joint_angles failed, robot NOT sent home")
+                    rospy.logerr("driver_subscriber::callback_home_trigger: go_home failed, robot NOT sent home")
                 print("Kinova sent home:", success, "Joints:", self.kinova.position)
             finally:
                 self.busy_pub.publish(Bool(False))

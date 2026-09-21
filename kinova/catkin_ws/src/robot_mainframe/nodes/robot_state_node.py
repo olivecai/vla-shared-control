@@ -26,7 +26,7 @@ class RobotStateNode:
         rospy.init_node('robot_state_publisher', anonymous=True)
         self.gripper_position = 0.0  # 0 (open) .. 100 (closed); updated by _gripper_cb
         try:
-            kinova = KinovaGen3(read_joint_state=True)
+            kinova = KinovaGen3()  # always subscribes to joint state now, no read_joint_state flag
             rospy.loginfo(f"Connected to KinovaGen3: {kinova}")
         except:
             kinova = None
