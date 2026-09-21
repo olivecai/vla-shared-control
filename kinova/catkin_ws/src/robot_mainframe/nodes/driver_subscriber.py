@@ -103,7 +103,13 @@ class DriverNode:
             # radians too, but kinova_gen3.py's send_joint_angles now expects degrees.
             positions_rad = [np.clip(p, *JOINT_LIMIT[i]) for i, p in enumerate(data.position)]
             positions_deg = np.degrees(positions_rad)
-            self.kinova.send_joint_angles(positions_deg)
+            # send_joint_angles is action-based, same as go_home() -- pause driver_publisher.py's
+            # cartesian_velocity streaming for the duration, same reasoning as callback_home_trigger.
+            self.busy_pub.publish(Bool(True))
+            try:
+                self.kinova.send_joint_angles(positions_deg)
+            finally:
+                self.busy_pub.publish(Bool(False))
         else:
             rospy.loginfo(f"WARNING: Kinova not found.")
 

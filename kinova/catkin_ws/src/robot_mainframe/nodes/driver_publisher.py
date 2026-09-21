@@ -14,10 +14,13 @@ This file has all the different robot control methods, like XBOX_TELEOP etc!!!
 
 This node publishes driving commands to the driver_subscriber nodes
 
+DOES NOT ACTUALLY DRIVE KINOVA, that is the job to the driver node subscriber since it recv all cmds
+
 '''
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from const import *
+from position_log import pop_last_position, DEFAULT_LOG_PATH
 
 class Driver:
     # consider Driver class as kind of like a Trait in Rust st different types of Drivers need to satisfy the implementation (methods) of the trait Driver
@@ -55,10 +58,19 @@ class XboxController: #name is XBOX_TELEOP
         self.gripper_velocity_pub = rospy.Publisher('/driver/gripper_velocity', Float32, queue_size=1)
         self.home_trigger_pub = rospy.Publisher('/driver/home_trigger', Empty, queue_size=1)
         self.record_toggle_pub = rospy.Publisher('/driver/record_toggle', Empty, queue_size=1)
+        self.joint_state_pub = rospy.Publisher('/driver/joint_state', JointState, queue_size=1)
+        self.gripper_state_pub = rospy.Publisher('/driver/gripper_state', Float32, queue_size=1)
         self._prev_home_button = 0
         self._prev_mode_button = 0
         self._prev_record_button = 0
         self.mode = 0  # 0 = cartesian velocity (translation), 1 = robot orientation (rotation)
+
+        # UNDO: pop_last_position() returns the same [j0..j6 (deg), gripper (%)] row
+        # position_log.py pushes -- convert joints back to radians and forward as an absolute
+        # target on /driver/joint_state + /driver/gripper_state, the same topics VLA inference
+        # uses. Rate-limited (not edge-triggered) so holding the button keeps undoing.
+        self.undo_log_path = rospy.get_param('~undo_log_path', DEFAULT_LOG_PATH)
+        self._last_undo_time = rospy.Time(0)
 
         # driver_subscriber.py sets this True while it's mid-way through a blocking,
         # action-based command (currently just homing) -- an active cartesian_velocity stream
@@ -127,9 +139,29 @@ class XboxController: #name is XBOX_TELEOP
             self.home_trigger_pub.publish(Empty())
         self._prev_home_button = msg.buttons[6]
 
-        if msg.buttons[7] and not self._prev_record_button:  
+        if msg.buttons[7] and not self._prev_record_button:
             self.record_toggle_pub.publish(Empty())
         self._prev_record_button = msg.buttons[7]
+
+        if msg.buttons[UNDO_BUTTON_INDEX]:
+            now = rospy.Time.now()
+            if (now - self._last_undo_time).to_sec() >= UNDO_SECOND_RATE:
+                self._trigger_undo()
+                self._last_undo_time = now
+
+    def _trigger_undo(self):
+        row = pop_last_position(self.undo_log_path)
+        if row is None:
+            rospy.loginfo("XboxController: undo pressed but position log is empty, nothing to undo")
+            return
+
+        joints_deg, gripper_pct = row[:KINOVA_DOF], row[KINOVA_DOF]
+        joint_cmd = JointState()
+        joint_cmd.header.stamp = rospy.Time.now()
+        joint_cmd.position = np.radians(joints_deg).tolist()
+        self.joint_state_pub.publish(joint_cmd)
+        self.gripper_state_pub.publish(Float32(gripper_pct))
+        rospy.loginfo(f"XboxController: undo -> joints(deg)={joints_deg}, gripper={gripper_pct}")
      
 
 

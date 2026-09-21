@@ -32,4 +32,11 @@ JOINT_LIMIT = {
 }
 
 HOME_RAW_DEGREES = [11, 345, 170, 219, 5, 320, 80]
-    
+
+DELTA_JOINT_POSITION_DEG = 3
+
+# Xbox teleop: while the UNDO button (X, button index 2 -- unused otherwise) is held, pop one
+# position off position_log.py's stack and send the arm there, at most once every this many
+# seconds (repeats for as long as it's held).
+UNDO_BUTTON_INDEX = 2
+UNDO_SECOND_RATE = 1.0
