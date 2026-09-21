@@ -8,7 +8,11 @@ from sensor_msgs.msg import Joy
 from control_utils.ik_utils import png_control, cartesian_control, joint_control, xbox_control
 from control_utils.kinova_gen3 import RGBDVision
 
-from std_msgs.msg import Int32MultiArray, Float32, Int16
+from std_msgs.msg import Int32MultiArray, Int16
+
+
+from const import * 
+from position_log import pop_last_position
 
 class CustomCommand():
     def __init__(self, ax, mode, trans_gain, rot_gain, wrist_gain):
@@ -24,7 +28,11 @@ def gen_iris(base):
             super(IrisRecord, self).__init__(None)
             self.mode = 0 # modes for control
             self.automatic = 0 # mode for whether it approaches automatically
-            self.prev_button_2 = 0 # prev button 2 to prevent double clicks
+            self.prev_button_2 = 0 # prev button 2 to prevent double clicks (joystick mode only)
+            # Same param name/default as position_log.py's ~log_path, so both nodes agree on
+            # the stack file location unless overridden identically on both.
+            self.undo_log_path = rospy.get_param('~log_path', DEFAULT_LOG_PATH)
+            self._last_undo_time = rospy.Time(0) # epoch, so the first undo press fires immediately
             self.prev_gripper_cmd = 0.0 # prev gripper cmd
             self.gripper_cmd = 0.0 # gripper cmd
             self.axes_vector = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # joystick cmd
@@ -119,8 +127,22 @@ def gen_iris(base):
                     pass
 
                 if msg.buttons[2]:
-                    pass
-                    
+                    # Held, not edge-triggered: pop one more step off the undo stack every
+                    # UNDO_RATE seconds for as long as the button stays down. Only pop from the
+                    # stack, never push the undo itself back onto it, since that would create a
+                    # duplicate entry and make the next undo a no-op.
+                    now = rospy.Time.now()
+                    if (now - self._last_undo_time).to_sec() >= UNDO_RATE:
+                        row = pop_last_position(self.undo_log_path)
+                        if row is None:
+                            rospy.loginfo("XboxController: undo pressed but position log is empty, nothing to undo")
+                        else:
+                            joints_deg, gripper_pct = row[:KINOVA_DOF], row[KINOVA_DOF]
+                            self.send_joint_angles(joints_deg)
+                            self.send_gripper_position(gripper_pct / 100.0)
+                            rospy.loginfo(f"XboxController: undo -> joints(deg)={joints_deg}, gripper={gripper_pct}")
+                        self._last_undo_time = now
+
                 if msg.buttons[3]:
                     pass
 

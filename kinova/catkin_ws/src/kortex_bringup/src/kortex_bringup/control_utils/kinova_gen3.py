@@ -577,7 +577,7 @@ class KinovaGen3(object):
 
         #rospy.loginfo("Sending the gripper command...")
 
-        # Call the service 
+        # Call the service
         try:
             self.send_gripper_command_srv(req)
         except rospy.ServiceException:
@@ -587,6 +587,39 @@ class KinovaGen3(object):
             #time.sleep(0.5)
             return True
 
+    def send_gripper_position(
+        self,
+        value: float,
+        ):
+        """Move the gripper to an absolute position, unlike send_gripper_command above which is
+        GRIPPER_SPEED-mode (continuous velocity while held). Used by the undo/position-log
+        stack (position_log.py) to restore a previously logged gripper position.
+
+        Args:
+            value: float in [0.0, 1.0], 0=open, 1=closed (gripper_feedback motor position, which
+                is on a 0-100 scale, divided by 100 to get this).
+        """
+        try:
+            assert self.is_gripper_present == True
+        except:
+            rospy.logerr("No gripper is present on the arm.")
+            return False
+
+        self.prev_gripper_cmd = value
+        req = SendGripperCommandRequest()
+        finger = Finger()
+        finger.finger_identifier = 0
+        finger.value = value
+        req.input.gripper.finger.append(finger)
+        req.input.mode = GripperMode.GRIPPER_POSITION
+
+        try:
+            self.send_gripper_command_srv(req)
+        except rospy.ServiceException:
+            rospy.logerr("Failed to call SendGripperCommand")
+            return False
+        else:
+            return True
 
     def __str__(self):
         string = "Kinova Gen3\n"

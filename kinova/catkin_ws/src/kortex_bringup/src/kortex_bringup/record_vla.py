@@ -7,7 +7,7 @@ only subscribs
 reads
     /my_gen3/joint_states      (sensor_msgs/JointState)          arm joint angles
     /my_gen3/base_feedback     (kortex_driver/BaseCyclic_Feedback) gripper position + tool pose
-    /cam/color/image_raw       (sensor_msgs/Image)               RGB (override with --image-topics)
+    /camera0/color/image_raw   (sensor_msgs/Image)               RGB (override with --image-topics)
     /joy                       (sensor_msgs/Joy)                 buttons[7] starts/stops an episode
 
 Writes one folder per episode under --out-dir:
@@ -20,13 +20,22 @@ Writes one folder per episode under --out-dir:
         cam{i}/000000.jpg ...   -- one RGB frame per timestep, per image topic (i = index in --image-topics)
 
 Usage:
-    # Already running: kortex bringup, camera (/cam/color/image_raw), joy_node, and xbox_control script (iris_control).
+    docker exec -it vla_shared_control bash
+    roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.168.1.127
+
+    docker exec -it vla_shared_control bash
+    rosrun joy joy_node _dev:=/dev/input/js0
+
+    docker exec -it vla_shared_control bash
+    rosrun kortex_bringup control_robot.py
+
+    docker exec -it vla_shared_control bash
+    roslaunch realsense2_camera rs_camera.launch camera:=camera0 serial_no:=<serial number>
+
+    docker exec -it vla_shared_control bash
     python3 record_vla.py --out-dir data --hz 5
 
-    # If you instead run the realsense-ros driver under a different camera name and use
-    # camera_node.py to republish it as /cameras/cam0 (rgb8):
-    #   roslaunch realsense2_camera rs_camera.launch camera:=camera0
-    #   rosrun kortex_bringup camera_node.py _cam_id:=0 _color_topic:=/camera0/color/image_raw
+    # OR With a different camera name, or camera_node.py republishing as /cameras/cam0:
     python3 record_vla.py --image-topics /cameras/cam0
 
 Controls: type an instruction in the terminal, then press the controller's button 7
@@ -177,7 +186,7 @@ def save_episode(frames, instruction, out_dir):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default="data")
-    parser.add_argument("--image-topics", nargs="+", default=["/cam/color/image_raw"])
+    parser.add_argument("--image-topics", nargs="+", default=["/camera0/color/image_raw"])
     parser.add_argument("--hz", type=float, default=5.0)
     args, _ = parser.parse_known_args()  # ignore rosrun's __name/__log remap args
 

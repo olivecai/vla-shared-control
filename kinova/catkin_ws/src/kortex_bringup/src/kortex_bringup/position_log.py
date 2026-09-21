@@ -61,16 +61,12 @@ import sys
 import fcntl
 import rospy
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Float32
+from kortex_driver.msg import BaseCyclic_Feedback
 import numpy as np
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from const import *
-
-# Ephemeral by design, like undo history in a browser/art app -- resets each session rather than
-# accumulating stale history across restarts. Override with the ~log_path private param.
-DEFAULT_LOG_PATH = "/tmp/kinova_position_log.txt"
 
 
 def _row_to_line(position_deg):
@@ -117,7 +113,10 @@ def pop_last_position(path):
 class PositionLogNode:
     def __init__(self):
         '''
-        listens to '/joint_states` for JointState and `/gripper_state` for Float32
+        listens to /my_gen3/joint_states for JointState (arm) and /my_gen3/base_feedback for
+        BaseCyclic_Feedback (gripper) -- the same topics control_robot.py / kinova_gen3.py
+        already publish and read, so this node logs whatever the arm is actually doing instead
+        of a separate /joint_states + /gripper_state pair that nothing publishes.
         '''
         rospy.init_node('robot_joint_position_log', anonymous=True)
         self.log_path = rospy.get_param('~log_path', DEFAULT_LOG_PATH)
@@ -125,23 +124,32 @@ class PositionLogNode:
 
         # NaN-initialized (not zeros) so "has every field been populated at least once" can be
         # checked with an isnan test, instead of a zero position looking indistinguishable from
-        # "not received yet" -- KINOVA_DOF joints (radians from /joint_states) + 1 gripper
-        # (percent 0-100 from /gripper_state), stored here converted to degrees for the joints so
-        # the whole row is in human-readable units matching DELTA_JOINT_POSITION_DEG.
+        # "not received yet" -- KINOVA_DOF joints (radians from /my_gen3/joint_states) + 1 gripper
+        # (percent 0-100 from /my_gen3/base_feedback's gripper_feedback), stored here converted to
+        # degrees for the joints so the whole row is in human-readable units matching
+        # DELTA_JOINT_POSITION_DEG.
         self.last_position = None  # only set once we have a first full reading to compare against
         self.current_position = np.full(KINOVA_DOF + 1, np.nan)
+        self._warned_gripper = False
 
-        rospy.Subscriber('/joint_states', JointState, self.callback_joint_state)
-        rospy.loginfo(f"Initialized Log sub on topic /joint_states")
-        rospy.Subscriber('/gripper_state', Float32, self.callback_gripper_state)
-        rospy.loginfo(f"Initialized Log sub on topic /gripper_state")
+        rospy.Subscriber('/my_gen3/joint_states', JointState, self.callback_joint_state)
+        rospy.loginfo(f"Initialized Log sub on topic /my_gen3/joint_states")
+        rospy.Subscriber('/my_gen3/base_feedback', BaseCyclic_Feedback, self.callback_base_feedback)
+        rospy.loginfo(f"Initialized Log sub on topic /my_gen3/base_feedback")
 
     def callback_joint_state(self, data):
         self.current_position[0:KINOVA_DOF] = np.degrees(data.position[:KINOVA_DOF])
         self._maybe_log()
 
-    def callback_gripper_state(self, data: Float32):
-        self.current_position[KINOVA_DOF] = data.data
+    def callback_base_feedback(self, data: BaseCyclic_Feedback):
+        try:
+            self.current_position[KINOVA_DOF] = float(
+                data.interconnect.oneof_tool_feedback.gripper_feedback[0].motor[0].position)
+        except (AttributeError, IndexError):
+            if not self._warned_gripper:
+                rospy.logwarn("No gripper feedback in base_feedback; position log will never see a full row.")
+                self._warned_gripper = True
+            return
         self._maybe_log()
 
     def _maybe_log(self):
