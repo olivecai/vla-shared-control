@@ -65,5 +65,5 @@ roslaunch kortex_bringup kortex_bringup.launch ip_address:=<arm ip>
 rosrun joy joy_node
 
 # terminal 3
-rosrun kortex_bringup record_main.py
+rosrun kortex_bringup control_robot.py
 ```

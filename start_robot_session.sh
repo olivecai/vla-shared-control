@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Brings up the full teleop/recording session (container + all ROS nodes + record.py) in a
-# single tmux session, one window per terminal from vla/README.md's manual instructions.
+# Brings up the full teleop/recording session (container + all ROS nodes + record_vla.py) in a
+# single tmux session, one window per terminal from the manual instructions in
+# kortex_bringup/src/kortex_bringup/record_vla.py's docstring.
 #
 # Usage:
 #   ./start_robot_session.sh
-#   IP_ADDRESS=192.168.1.50 CAM_ID=8 ./start_robot_session.sh   # override defaults
+#   IP_ADDRESS=192.168.1.50 CAM_ID=1 SERIAL_NO=123456789 ./start_robot_session.sh   # override defaults
 #
 # Re-running while the session is still up just re-attaches to it instead of restarting
 # everything. Detach with `Ctrl-b d`; kill the whole session with `tmux kill-session -t kinova`.
@@ -14,9 +15,11 @@ SESSION="kinova"
 CONTAINER="vla_shared_control"
 IP_ADDRESS="${IP_ADDRESS:-192.168.1.127}"
 CAM_ID="${CAM_ID:-0}"
+SERIAL_NO="${SERIAL_NO:-017322072808}"
 JOY_DEV="${JOY_DEV:-/dev/input/js0}"
 JOY_HZ="${JOY_HZ:-30}"
 HZ="${HZ:-5}"
+OUT_DIR="${OUT_DIR:-/home/user/la/data}"
 
 if ! command -v tmux >/dev/null; then
     echo "tmux is not installed (apt install tmux)." >&2
@@ -43,15 +46,6 @@ window_cmd() {
 tmux new-session -d -s "$SESSION" -n bringup
 window_cmd bringup "roslaunch kortex_bringup kortex_bringup.launch ip_address:=$IP_ADDRESS"
 
-tmux new-window -t "$SESSION" -n camera
-window_cmd camera "rosrun robot_mainframe camera_node.py _cam_id:=$CAM_ID"
-
-tmux new-window -t "$SESSION" -n state
-window_cmd state "rosrun robot_mainframe robot_state_node.py"
-
-tmux new-window -t "$SESSION" -n driver
-window_cmd driver "rosrun robot_mainframe driver_subscriber.py"
-
 tmux new-window -t "$SESSION" -n joy
 # _autorepeat_rate: joy_node defaults to 0 (only publishes /joy on a value CHANGE), so holding
 # a stick at a constant deflection stops /joy entirely until the value moves again -- with
@@ -59,11 +53,18 @@ tmux new-window -t "$SESSION" -n joy
 # updates. Setting a steady republish rate keeps commands flowing continuously while held.
 window_cmd joy "rosrun joy joy_node _dev:=$JOY_DEV _autorepeat_rate:=$JOY_HZ"
 
-tmux new-window -t "$SESSION" -n publisher
-window_cmd publisher "rosrun robot_mainframe driver_publisher.py"
+tmux new-window -t "$SESSION" -n control
+window_cmd control "rosrun kortex_bringup control_robot.py"
+
+tmux new-window -t "$SESSION" -n camera
+window_cmd camera "roslaunch realsense2_camera rs_camera.launch camera:=camera$CAM_ID serial_no:=$SERIAL_NO"
 
 tmux new-window -t "$SESSION" -n record
-window_cmd record "python3 /home/user/vla/record.py --out-dir /home/user/vla/data --cam-ids $CAM_ID --hz $HZ"
+# record_vla.py isn't installed as a rosrun-able script (not marked executable, unlike
+# control_robot.py), so cd to it and run it with python3 directly instead.
+window_cmd record "cd /home/user/kinova/catkin_ws/src/kortex_bringup/src/kortex_bringup && python3 record_vla.py --out-dir $OUT_DIR --hz $HZ --image-topics /camera$CAM_ID/color/image_raw"
 
 tmux select-window -t "$SESSION:bringup"
 tmux attach -t "$SESSION"
+
+

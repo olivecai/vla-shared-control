@@ -30,7 +30,9 @@ Usage:
     rosrun kortex_bringup control_robot.py
 
     docker exec -it vla_shared_control bash
-    roslaunch realsense2_camera rs_camera.launch camera:=camera0 serial_no:=<serial number>
+    # roslaunch realsense2_camera rs_camera.launch camera:=camera0 serial_no:=<serial number>
+    roslaunch realsense2_camera rs_camera.launch camera:=camera0 serial_no:=017322072808
+
 
     docker exec -it vla_shared_control bash
     python3 record_vla.py --out-dir data --hz 5

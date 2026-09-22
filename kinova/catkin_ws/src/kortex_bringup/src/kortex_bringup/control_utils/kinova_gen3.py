@@ -518,9 +518,9 @@ class KinovaGen3(object):
             return False
         
         # Declare max velocities 
-        MAXV_TX = 0.05
-        MAXV_TY = 0.05
-        MAXV_TZ = 0.08
+        MAXV_TX = 0.1
+        MAXV_TY = 0.1
+        MAXV_TZ = 0.1
         MAXV_RX = 0.5
         MAXV_RY = 0.3
         MAXV_RZ = 0.5
