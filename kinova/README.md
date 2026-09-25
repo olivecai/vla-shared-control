@@ -17,10 +17,6 @@ Now you should be in the container;
 
 6. In the container, run the following. It will take a few minutes:
 ```
-cd /home/user/kinova/catkin_ws/src
-git clone -b noetic-devel https://github.com/Kinovarobotics/ros_kortex.git
-git clone -b master https://github.com/Kinovarobotics/ros_kortex_vision.git
-git clone https://github.com/cjiang2/kortex_bringup.git
 cd /home/user/kinova/catkin_ws
 rosdep install --from-paths src --ignore-src -r -y
 catkin_make
@@ -42,4 +38,8 @@ Now if you would like to run the actual robot and ROS nodes:
     [INFO] [1787172240.872582046]: -------------------------------------------------
     [INFO] [1787172241.074417166]: The Kortex driver has been initialized correctly!
 
-9. In a seperate container terminal: run your script using rosrun `rosrun kinova_basic_tests test1.py` (see the vla/record.py script for )
+9. Find out the camera serial number:
+
+Run `roslaunch realsense2_camera rs_camera.launch camera:=camera0`. It will error. Then read the `Device with serial number` line in the log. Go into `start_robot_session.sh` and edit the SERIAL_NO at the top of the file. For instance, the line is currently `SERIAL_NO="${SERIAL_NO:-017322072808}"`
+
+10. In a seperate container terminal: run your script using rosrun `rosrun kinova_basic_tests test1.py` (see the vla/record.py script for )
