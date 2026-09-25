@@ -35,6 +35,11 @@ fi
 
 (cd "$SCRIPT_DIR/kinova" && docker compose build && docker compose up -d)
 
+for pat in '[r]oslaunch' '[r]osmaster' '[r]osout' '[j]oy_node' '[c]ontrol_robot.py' \
+           '[p]osition_log.py' '[r]ecord_vla.py' '[n]odelet' '[k]ortex_arm_driver'; do
+    docker exec "$CONTAINER" pkill -9 -f "$pat" || true
+done
+
 # window_cmd NAME COMMAND -- opens a docker exec shell in a new window/pane and runs COMMAND in it.
 window_cmd() {
     local name="$1" cmd="$2"
@@ -58,6 +63,9 @@ window_cmd control "rosrun kortex_bringup control_robot.py"
 
 tmux new-window -t "$SESSION" -n camera
 window_cmd camera "roslaunch realsense2_camera rs_camera.launch camera:=camera$CAM_ID serial_no:=$SERIAL_NO"
+
+tmux new-window -t "$SESSION" -n undo
+window_cmd undo "rosrun kortex_bringup position_log.py"
 
 tmux new-window -t "$SESSION" -n record
 # record_vla.py isn't installed as a rosrun-able script (not marked executable, unlike
