@@ -4,7 +4,7 @@
 
 2. cd into the repository vla-shared-control
 
-3. `cd kinova`
+3. `cd kinova/ ; docker compose up -d --build`
 
 4. `docker exec -it vla_shared_control bash` to enter the Docker container.
 
@@ -15,6 +15,8 @@ Now you should be in the container;
 
 6. In the container, run the following. It will take a few minutes:
 ```
+echo $ROS_DISTRO          # should print noetic 
+rosdep update             #
 cd /home/user/kinova/catkin_ws
 rosdep install --from-paths src --ignore-src -r -y
 catkin_make
