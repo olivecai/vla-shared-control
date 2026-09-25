@@ -1,7 +1,5 @@
 # Set up Kinova Docker and catkin packages...
 
-NOTE: ENSURE YOU ARE CONNECTED TO THE ROBOT VISION WIFI!!!!! Otherwise kinova wont properly initialize!!!
-
 1. clone repository https://github.com/olivecai/vla-shared-control if you haven't already: `git clone git@github.com:olivecai/vla-shared-control.git`
 
 2. cd into the repository vla-shared-control
@@ -25,10 +23,11 @@ source devel/setup.bash
 
 Now if you would like to run the actual robot and ROS nodes:
 
-7. Turn on the Kinova.
+7. Turn on the Kinova by pressing the ON button on the base until the blue LED turns on. Let go of the button. The blue LED will turn off and after ~30 seconds, the blue LED and a yellow LED will turn on. If the yellow LED turns green, the Kinova is ready; if else it turns red, turn off the Kinova by holding the power button, readjust its position, and try again. Ensure the RJ45 ethernet LED is green.
 
-8. Launch the robot driver `roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.168.1.127`
+8. Ensure you are connected to the RobotVision wifi, otherwise the connection to the robot will not work.
 
+9. Launch the robot driver `roslaunch kortex_bringup kortex_bringup.launch ip_address:=192.168.1.127`
 > example output:
     [INFO] [1787172238.776892559]: State changed from INITIALIZING to IDLE
 

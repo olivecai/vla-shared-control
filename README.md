@@ -22,10 +22,14 @@ This structure ensures that computations and dataflow is not too messy!!!
 python3 scripts/convert_unified_to_lerobot_v2.py kinova-diffusion/data/my-robot-dataset <out_dir> --repo-id my-username/my-robot-dataset
  
 
+Instructions on teleop with Kinova:
 
+Reference 
 
- SEP 17 
+Instructions on training Isaac Groot VLA model:
 
+1. First, install the Isaac Groot packages (conda env optional)
+```
 git clone https://github.com/NVIDIA/Isaac-GR00T.git
 conda create -n groot python=3.12
 conda activate groot
@@ -33,3 +37,4 @@ conda activate groot
  pip install torch==2.9.0 torchvision==0.24.0
 pip install flash-attn==2.8.3 --no-build-isolation
 pip install -e .
+```

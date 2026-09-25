@@ -1,8 +1,15 @@
 # Extra packages needed by train.py / inference.py on top of the ROS env
 # (numpy, opencv-python, cv_bridge, rospy are assumed to already be set up per kinova/requirements.txt).
+#
+# transformers/peft are pinned (rather than >=) because OpenVLA's `trust_remote_code` modeling
+# code on the Hub was written against transformers 4.40.x -- newer transformers (v5) removed
+# AutoModelForVision2Seq, and newer peft (0.2x) expects transformers APIs (e.g.
+# EncoderDecoderCache) that 4.40.1 doesn't have.
 torch>=2.1
-transformers>=4.40
+transformers==4.40.1
 accelerate>=0.30
-peft>=0.10
-pillow
+peft==0.11.1
+pillow>=9.1
 huggingface_hub>=0.23
+# openvla/openvla-7b's remote modeling code hard-requires timm < 1.0.0.
+timm==0.9.16

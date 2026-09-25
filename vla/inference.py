@@ -19,7 +19,7 @@ Usage:
     rosrun robot_mainframe camera_node.py _cam_id:=0    # in another terminal
     rosrun robot_mainframe robot_state_node.py          # in another terminal
     rosrun robot_mainframe driver_subscriber.py               # in another terminal
-    python3 inference.py --checkpoint vla/checkpoints/kinova-lora --instruction "pick up the cup"
+    python3 inference.py --checkpoint vla-scratch/checkpoints/kinova-lora --instruction "pick up the cup"
 """
 import argparse
 
