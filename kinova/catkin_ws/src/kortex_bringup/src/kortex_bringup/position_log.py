@@ -58,10 +58,12 @@ Have this file be read by the driver_publisher whenever the "undo" mode is activ
 
 import os
 import sys
+import time
 import fcntl
 import rospy
 from sensor_msgs.msg import JointState
 from kortex_driver.msg import BaseCyclic_Feedback
+from std_msgs.msg import Bool
 import numpy as np
 
 
@@ -77,6 +79,26 @@ def _line_to_row(line):
     return np.array([float(v) for v in line.split()])
 
 
+def new_log_file(base_path):
+    '''
+    Start a fresh, timestamped stack file (base "x.txt" -> "x_20260925_201530.txt") and point the
+    symlink at base_path to it. Other nodes (control_robot.py) keep reading/popping base_path and
+    transparently get the newest file, so every PositionLogNode starts with an empty stack.
+    Returns the real timestamped path.
+    '''
+    base_path = os.path.abspath(base_path)
+    stem, ext = os.path.splitext(base_path)
+    real_path = f"{stem}_{time.strftime('%Y%m%d_%H%M%S')}{ext}"
+    open(real_path, "w").close()
+
+    tmp_link = base_path + ".tmp"
+    if os.path.lexists(tmp_link):
+        os.remove(tmp_link)
+    os.symlink(real_path, tmp_link)
+    os.replace(tmp_link, base_path)  # atomic, so readers never see a missing base_path
+    return real_path
+
+
 def push_position(path, position_deg):
     '''Append one row (7 joint degrees + gripper percent) to the bottom of the stack file.'''
     with open(path, "a") as f:
@@ -87,10 +109,23 @@ def push_position(path, position_deg):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
+def peek_last_position(path):
+    '''Read the bottom row of the stack file without removing it. None if missing/empty.'''
+    if not os.path.exists(path):
+        return None
+    with open(path, "r") as f:
+        fcntl.flock(f, fcntl.LOCK_SH)
+        try:
+            lines = f.readlines()
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+    return _line_to_row(lines[-1]) if lines else None
+
+
 def pop_last_position(path):
     '''
-    Pop (read + remove) the bottom row of the stack file -- the "undo" consumer, meant to be
-    called from driver_publisher.py when undo mode is triggered. Returns None if the file is
+    Pop (read + remove) the bottom row of the stack file -- the "undo" consumer, called from
+    control_robot.py once the arm has reached the row it peeked. Returns None if the file is
     missing/empty (nothing left to undo to).
     '''
     if not os.path.exists(path):
@@ -119,23 +154,23 @@ class PositionLogNode:
         of a separate /joint_states + /gripper_state pair that nothing publishes.
         '''
         rospy.init_node('robot_joint_position_log', anonymous=True)
-        self.log_path = rospy.get_param('~log_path', DEFAULT_LOG_PATH)
+        self.log_path = new_log_file(rospy.get_param('~log_path', DEFAULT_LOG_PATH))
         rospy.loginfo(f"PositionLogNode: logging to {self.log_path}")
 
-        # NaN-initialized (not zeros) so "has every field been populated at least once" can be
-        # checked with an isnan test, instead of a zero position looking indistinguishable from
-        # "not received yet" -- KINOVA_DOF joints (radians from /my_gen3/joint_states) + 1 gripper
-        # (percent 0-100 from /my_gen3/base_feedback's gripper_feedback), stored here converted to
-        # degrees for the joints so the whole row is in human-readable units matching
-        # DELTA_JOINT_POSITION_DEG.
+      
         self.last_position = None  # only set once we have a first full reading to compare against
         self.current_position = np.full(KINOVA_DOF + 1, np.nan)
         self._warned_gripper = False
+        self.undo_active = False
 
+        rospy.Subscriber(UNDO_ACTIVE_TOPIC, Bool, self.callback_undo_active)
         rospy.Subscriber('/my_gen3/joint_states', JointState, self.callback_joint_state)
         rospy.loginfo(f"Initialized Log sub on topic /my_gen3/joint_states")
         rospy.Subscriber('/my_gen3/base_feedback', BaseCyclic_Feedback, self.callback_base_feedback)
         rospy.loginfo(f"Initialized Log sub on topic /my_gen3/base_feedback")
+
+    def callback_undo_active(self, data: Bool):
+        self.undo_active = data.data
 
     def callback_joint_state(self, data):
         self.current_position[0:KINOVA_DOF] = np.degrees(data.position[:KINOVA_DOF])
@@ -155,6 +190,13 @@ class PositionLogNode:
     def _maybe_log(self):
         if np.isnan(self.current_position).any():
             return  # still waiting on a first reading for some field
+
+        if self.undo_active:
+            # The arm is retracing the stack; logging that motion would push new rows onto the
+            # stack being popped. Keep the reference point current so logging resumes from
+            # wherever undo stops instead of seeing one big jump.
+            self.last_position = self.current_position.copy()
+            return
 
         if self.last_position is None:
             # First fully-populated reading -- nothing to compare against yet, just seed it.

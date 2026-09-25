@@ -8,11 +8,11 @@ from sensor_msgs.msg import Joy
 from control_utils.ik_utils import png_control, cartesian_control, joint_control, xbox_control
 from control_utils.kinova_gen3 import RGBDVision
 
-from std_msgs.msg import Int32MultiArray, Int16
+from std_msgs.msg import Int32MultiArray, Int16, Bool
 
 
-from const import * 
-from position_log import pop_last_position
+from const import *
+from position_log import peek_last_position, pop_last_position
 
 class CustomCommand():
     def __init__(self, ax, mode, trans_gain, rot_gain, wrist_gain):
@@ -32,7 +32,11 @@ def gen_iris(base):
             # Same param name/default as position_log.py's ~log_path, so both nodes agree on
             # the stack file location unless overridden identically on both.
             self.undo_log_path = rospy.get_param('~log_path', DEFAULT_LOG_PATH)
-            self._last_undo_time = rospy.Time(0) # epoch, so the first undo press fires immediately
+            self.undo_held = False # button 2 currently down (set by joy_callback, acted on in step)
+            self.undoing = False # an undo is in progress (arm being driven back through the stack)
+            self.undo_target = None # row peeked off the stack that the arm is currently heading to
+            self.undo_active_pub = rospy.Publisher(UNDO_ACTIVE_TOPIC, Bool, queue_size=1, latch=True)
+            self.undo_active_pub.publish(Bool(False))
             self.prev_gripper_cmd = 0.0 # prev gripper cmd
             self.gripper_cmd = 0.0 # gripper cmd
             self.axes_vector = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # joystick cmd
@@ -126,22 +130,9 @@ def gen_iris(base):
                 if msg.buttons[1]:
                     pass
 
-                if msg.buttons[2]:
-                    # Held, not edge-triggered: pop one more step off the undo stack every
-                    # UNDO_RATE seconds for as long as the button stays down. Only pop from the
-                    # stack, never push the undo itself back onto it, since that would create a
-                    # duplicate entry and make the next undo a no-op.
-                    now = rospy.Time.now()
-                    if (now - self._last_undo_time).to_sec() >= UNDO_RATE:
-                        row = pop_last_position(self.undo_log_path)
-                        if row is None:
-                            rospy.loginfo("XboxController: undo pressed but position log is empty, nothing to undo")
-                        else:
-                            joints_deg, gripper_pct = row[:KINOVA_DOF], row[KINOVA_DOF]
-                            self.send_joint_angles(joints_deg)
-                            self.send_gripper_position(gripper_pct / 100.0)
-                            rospy.loginfo(f"XboxController: undo -> joints(deg)={joints_deg}, gripper={gripper_pct}")
-                        self._last_undo_time = now
+                # Only record the button state here. The motion itself runs from step() so it
+                # never blocks this callback (a blocked callback lets /joy messages pile up).
+                self.undo_held = bool(msg.buttons[2])
 
                 if msg.buttons[3]:
                     pass
@@ -176,8 +167,50 @@ def gen_iris(base):
                 if msg.buttons[10]:
                     pass
 
+        def undo_step(self):
+            '''
+            One control tick of undo, called while button 2 is held: drive the joints toward the
+            bottom row of position_log.py's stack with a joint-speed command, and pop that row once
+            reached so the next tick heads to the one below it. Never pushes to the stack.
+            '''
+            if self.position is None:
+                return
+            if not self.undoing:
+                self.undoing = True
+                self.undo_active_pub.publish(Bool(True))
+
+            if self.undo_target is None:
+                row = peek_last_position(self.undo_log_path)
+                if row is None:
+                    self.send_joint_speeds_command(np.zeros(KINOVA_DOF))
+                    rospy.loginfo_throttle(2, "XboxController: undo held but position log is empty, nothing to undo")
+                    return
+                self.undo_target = row
+                self.send_gripper_position(row[KINOVA_DOF] / 100.0)
+
+            target = self.undo_target[:KINOVA_DOF]
+     
+            if np.max(np.abs(target - np.degrees(self.position[:KINOVA_DOF]))) >= UNDO_TOLERANCE_DEG:
+                self.send_joint_angles(target, wait_timeout=UNDO_HOP_TIMEOUT_S)
+            pop_last_position(self.undo_log_path)
+            self.undo_target = None
+
+
+        def undo_end(self):
+            self.send_joint_speeds_command(np.zeros(KINOVA_DOF))
+            self.undoing = False
+            self.undo_target = None
+            self.prev_cv_cmd = None # so teleop's dedupe doesn't swallow its first command after undo
+            self.undo_active_pub.publish(Bool(False))
+
         def step(self):
             if self.run:
+                if self.undo_held:
+                    self.undo_step()
+                    return
+                if self.undoing:
+                    self.undo_end()
+
                 self.custom_commands = []
                 
                 # step according to rospy rate

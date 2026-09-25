@@ -37,6 +37,14 @@ Requires: pandas, pyarrow, Pillow, and the `ffmpeg` binary on PATH.
 Usage:
     python3 vla/offline_scripts/convert_to_lerobot_groot.py \
         --data-dir vla/data --output-dir vla/lerobot_data
+
+
+        for example:
+        python3 vla/offline_scripts/convert_to_lerobot_groot.py  --data-dir vla/data_sep20 --output-dir vla/lerobo
+t_data
+Converted vla/data_sep20/episode_1790037263 -> episode_000000 (89 frames, cams [0])
+Converted vla/data_sep20/episode_1790037305 -> episode_000001 (84 frames, cams [0])
+Converted vla/data_sep20/episode_1790037341 -> episode_000002 (89 frames, cams [0])
 """
 import argparse
 import glob

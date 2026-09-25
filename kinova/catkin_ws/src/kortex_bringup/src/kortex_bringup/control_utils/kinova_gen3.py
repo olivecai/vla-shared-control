@@ -276,8 +276,12 @@ class KinovaGen3(object):
     def unblock_movement(self):
         self.movement_blocked = False
 
-    def _wait_for_action_end_or_abort(self):
+    def _wait_for_action_end_or_abort(self, timeout=None):
+        deadline = None if timeout is None else time.time() + timeout
         while not rospy.is_shutdown():
+            if deadline is not None and time.time() > deadline:
+                rospy.logwarn(f"No ACTION_END/ABORT notification within {timeout}s, giving up waiting")
+                return False
             if (self.last_action_notif_type == ActionEvent.ACTION_END):
                 rospy.loginfo("Received ACTION_END notification")
                 return True
@@ -332,6 +336,7 @@ class KinovaGen3(object):
         angles: list,
         angular_duration: float = 0.0,
         MAX_ANGULAR_DURATION: float = 30.0,
+        wait_timeout: float = None,
         ):
         """Move Gen3 to specified joint angles.
         Args:
@@ -339,6 +344,8 @@ class KinovaGen3(object):
             angular_duration: float. Control duration between AngularWaypoint 
                 in a trajectory. 0 by default.
             MAX_ANGULAR_DURATION: float. To validate if angles are safe.
+            wait_timeout: float or None. Seconds to wait for the arm's ACTION_END/ABORT
+                notification before giving up (None = wait forever).
         """
         # NOTE: IMPORTANT!
         # Beforehand, make sure joint velocity is 0.0
@@ -432,7 +439,7 @@ class KinovaGen3(object):
             rospy.logerr("Failed to call ExecuteWaypointjectory")
             return False
         else:
-            return self._wait_for_action_end_or_abort()
+            return self._wait_for_action_end_or_abort(wait_timeout)
 
     def dh_mats(self, n=(0,7)):
         current_angles = np.concatenate(([0], (self.position[:7]), [0]))
@@ -605,7 +612,8 @@ class KinovaGen3(object):
             rospy.logerr("No gripper is present on the arm.")
             return False
 
-        self.prev_gripper_cmd = value
+        # Deliberately not touching self.prev_gripper_cmd: that tracks the SPEED-mode command, and
+        # updating it here would make the next control step send a speed-0 that cancels this move.
         req = SendGripperCommandRequest()
         finger = Finger()
         finger.finger_identifier = 0
