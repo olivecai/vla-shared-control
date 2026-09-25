@@ -4,9 +4,9 @@ import rospy
 import numpy as np
 from kortex_driver.srv import *
 from kortex_driver.msg import *
-from sensor_msgs.msg import Joy
+from sensor_msgs.msg import Joy, JointState
 from control_utils.ik_utils import png_control, cartesian_control, joint_control, xbox_control
-from control_utils.kinova_gen3 import RGBDVision
+from control_utils.kinova_gen3 import RGBDVision, JOINT_LIMIT
 
 from std_msgs.msg import Int32MultiArray, Int16, Bool
 
@@ -52,6 +52,13 @@ def gen_iris(base):
 
             self.tool_sub = rospy.Subscriber("/my_gen3/base_feedback", BaseCyclic_Feedback, self.tool_callback)
             self.joy_sub = rospy.Subscriber("/joy", Joy, self.joy_callback)
+
+            self.inference_held = False # deadman button down (set by joy_callback, acted on in step)
+            self.inferring = False # currently following model targets
+            self.inference_target = None # latest [7 joints rad, gripper 0-100] from vla/inference.py
+            self.inference_target_time = None
+            self.last_inference_gripper = None
+            self.inference_sub = rospy.Subscriber(INFERENCE_TARGET_TOPIC, JointState, self.inference_target_callback, queue_size=1)
 
             self.stage_pub = rospy.Publisher("/my_gen3/inference/stage", Int16, queue_size=10)
 
@@ -133,6 +140,7 @@ def gen_iris(base):
                 # Only record the button state here. The motion itself runs from step() so it
                 # never blocks this callback (a blocked callback lets /joy messages pile up).
                 self.undo_held = bool(msg.buttons[2])
+                self.inference_held = len(msg.buttons) > INFERENCE_ENABLE_BUTTON and bool(msg.buttons[INFERENCE_ENABLE_BUTTON])
 
                 if msg.buttons[3]:
                     pass
@@ -196,6 +204,66 @@ def gen_iris(base):
             self.undo_target = None
 
 
+        def inference_target_callback(self, msg):
+            if len(msg.position) < KINOVA_DOF + 1:
+                rospy.logwarn_throttle(2, f"Inference: target needs {KINOVA_DOF + 1} values, got {len(msg.position)}; ignoring")
+                return
+            self.inference_target = np.array(msg.position[:KINOVA_DOF + 1], dtype=np.float64)
+            self.inference_target_time = rospy.Time.now() # receive time, so clock differences don't matter
+
+        def inference_step(self):
+            '''
+            One control tick while the deadman button is held: drive the joints toward the model's
+            latest absolute target with a capped joint-speed command (non-blocking, refreshed every
+            tick), and move the gripper to its target. Anything stale, malformed or far from the
+            arm's current pose makes the arm hold still instead.
+            '''
+            if not self.inferring:
+                self.inferring = True
+                rospy.loginfo("Inference: deadman held, following model targets")
+            if self.position is None:
+                return
+
+            zeros = np.zeros(KINOVA_DOF)
+            fresh = (self.inference_target is not None and
+                     (rospy.Time.now() - self.inference_target_time).to_sec() < INFERENCE_TARGET_TIMEOUT_S)
+            if not fresh:
+                self.send_joint_speeds_command(zeros)
+                rospy.loginfo_throttle(2, "Inference: no fresh target from the model, holding still")
+                return
+
+            target = self.inference_target.copy()
+            for j in (1, 3, 5): # only the physically limited joints; the others can report angles past +-pi
+                target[j] = np.clip(target[j], JOINT_LIMIT[j][0], JOINT_LIMIT[j][1])
+
+            err = np.degrees(target[:KINOVA_DOF] - self.position[:KINOVA_DOF])
+            worst = np.max(np.abs(err))
+            if worst > INFERENCE_MAX_STEP_DEG:
+                self.send_joint_speeds_command(zeros)
+                rospy.logwarn_throttle(1, f"Inference: target is {worst:.1f} deg from the arm (> {INFERENCE_MAX_STEP_DEG}), ignoring it")
+                return
+
+            if worst < INFERENCE_DEADBAND_DEG:
+                vel = zeros
+            else:
+                vel = INFERENCE_GAIN * err
+                peak = np.max(np.abs(vel))
+                if peak > INFERENCE_MAX_JOINT_SPEED_DEG_S:
+                    vel = vel * (INFERENCE_MAX_JOINT_SPEED_DEG_S / peak)
+            self.send_joint_speeds_command(vel)
+
+            grip = float(np.clip(target[KINOVA_DOF], 0.0, 100.0))
+            if self.last_inference_gripper is None or abs(grip - self.last_inference_gripper) >= INFERENCE_GRIPPER_DEADBAND:
+                self.send_gripper_position(grip / 100.0)
+                self.last_inference_gripper = grip
+
+        def inference_end(self):
+            self.send_joint_speeds_command(np.zeros(KINOVA_DOF))
+            self.inferring = False
+            self.last_inference_gripper = None
+            self.prev_cv_cmd = None # so teleop's dedupe doesn't swallow its first command after inference
+            rospy.loginfo("Inference: deadman released, stopped")
+
         def undo_end(self):
             self.send_joint_speeds_command(np.zeros(KINOVA_DOF))
             self.undoing = False
@@ -205,11 +273,20 @@ def gen_iris(base):
 
         def step(self):
             if self.run:
+                # Priority: undo > model (deadman held) > joystick teleop.
                 if self.undo_held:
+                    if self.inferring:
+                        self.inference_end()
                     self.undo_step()
                     return
                 if self.undoing:
                     self.undo_end()
+
+                if self.inference_held:
+                    self.inference_step()
+                    return
+                if self.inferring:
+                    self.inference_end()
 
                 self.custom_commands = []
                 
