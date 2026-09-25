@@ -12,6 +12,15 @@ services:
     privileged: true
     environment:
       - DISPLAY=${DISPLAY}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       - ../kinova:/home/user/kinova
       - ../vla:/home/user/vla
