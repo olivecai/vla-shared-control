@@ -16,7 +16,7 @@ CONTAINER="vla_shared_control"
 IP_ADDRESS="${IP_ADDRESS:-192.168.1.127}"
 CAM_ID="${CAM_ID:-0}"
 SERIAL_NO="${SERIAL_NO:-017322072808}"
-JOY_DEV="${JOY_DEV:-/dev/input/js1}" #if on benq pc, 0 for flight stick, 1 for gamepad
+JOY_DEV="${JOY_DEV:-/dev/input/js1}" #if on lab pc, 0 for flight stick, 1 for gamepad
 JOY_HZ="${JOY_HZ:-30}"
 HZ="${HZ:-5}"
 OUT_DIR="${OUT_DIR:-/home/user/la/data}"
@@ -52,10 +52,7 @@ tmux new-session -d -s "$SESSION" -n bringup
 window_cmd bringup "roslaunch kortex_bringup kortex_bringup.launch ip_address:=$IP_ADDRESS"
 
 tmux new-window -t "$SESSION" -n joy
-# _autorepeat_rate: joy_node defaults to 0 (only publishes /joy on a value CHANGE), so holding
-# a stick at a constant deflection stops /joy entirely until the value moves again -- with
-# nothing refreshing the downstream cartesian_velocity stream, the arm can stall out between
-# updates. Setting a steady republish rate keeps commands flowing continuously while held.
+
 window_cmd joy "rosrun joy joy_node _dev:=$JOY_DEV _autorepeat_rate:=$JOY_HZ"
 
 tmux new-window -t "$SESSION" -n control
@@ -68,8 +65,7 @@ tmux new-window -t "$SESSION" -n undo
 window_cmd undo "rosrun kortex_bringup position_log.py"
 
 tmux new-window -t "$SESSION" -n record
-# record_vla.py isn't installed as a rosrun-able script (not marked executable, unlike
-# control_robot.py), so cd to it and run it with python3 directly instead.
+
 window_cmd record "cd /home/user/kinova/catkin_ws/src/kortex_bringup/src/kortex_bringup && python3 record_vla.py --out-dir $OUT_DIR --hz $HZ --image-topics /camera$CAM_ID/color/image_raw"
 
 tmux select-window -t "$SESSION:bringup"
