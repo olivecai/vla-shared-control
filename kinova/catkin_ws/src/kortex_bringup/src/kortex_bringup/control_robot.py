@@ -12,7 +12,7 @@ from std_msgs.msg import Int32MultiArray, Int16, Bool
 
 
 from const import *
-from position_log import peek_last_position, pop_last_position
+from position_log import peek_last_position, pop_last_position, pop_first_position, clear_file
 
 class CustomCommand():
     def __init__(self, ax, mode, trans_gain, rot_gain, wrist_gain):
@@ -26,7 +26,7 @@ def gen_iris(base):
     class IrisRecord(base):
         def __init__(self):
             super(IrisRecord, self).__init__(None)
-            self.mode = 0 # modes for control
+            self.mode = CLASSIC_MODE # modes for control # 0 == CLASSIC_MODE record/teleop mode, 8 == DEPLOYMODE_A
             self.automatic = 0 # mode for whether it approaches automatically
             self.prev_button_2 = 0 # prev button 2 to prevent double clicks (joystick mode only)
             # Same param name/default as position_log.py's ~log_path, so both nodes agree on
@@ -62,8 +62,12 @@ def gen_iris(base):
 
             self.stage_pub = rospy.Publisher("/my_gen3/inference/stage", Int16, queue_size=10)
 
+            self.execute_held = False # deploy mode: stick pushed forward (set by joy_callback, acted on in step)
+
         def mode_switch(self):
-            self.mode = (self.mode + 1) % 2
+            self.mode = DEPLOYMODE_A if self.mode == CLASSIC_MODE else CLASSIC_MODE
+            self.undo_held = False
+            self.execute_held = False
             print(f"Current mode = {self.mode}\a", end="\r")
             return
 
@@ -72,59 +76,121 @@ def gen_iris(base):
             # print("TOOL DATA", self.tooldata)
 
         def joy_callback(self, msg):
-            self.joy_type = 1 #0 for joystick 1 for xbox controller
+            self.joy_type = 1 #0 for flight controller, 1 for xbox controller
             self.buttons = msg.buttons
 
             # check for gripper commands
-            if self.joy_type == 0:
-                self.axes_vector = msg.axes
-                MAXV_GR = 0.3
+            if self.joy_type == 0: # flight controller
+                if self.mode == CLASSIC_MODE:
+                    self.axes_vector = msg.axes
+                    MAXV_GR = 0.3
 
-                if msg.buttons[0]: # trigger button - close gripper
-                    self.gripper_cmd = -1 * MAXV_GR
-                elif msg.buttons[1]: # button by thumb - open gripper
-                    self.gripper_cmd = MAXV_GR
-                else: # both buttons 0 and 1 are zero
-                    self.gripper_cmd = 0.0
+                    if msg.buttons[0]: # trigger button - close gripper
+                        self.gripper_cmd = -1 * MAXV_GR
+                    elif msg.buttons[1]: # button by thumb - open gripper
+                        self.gripper_cmd = MAXV_GR
+                    else: # both buttons 0 and 1 are zero
+                        self.gripper_cmd = 0.0
 
-                if msg.buttons[2] == 0 and self.prev_button_2 == 1:
-                    self.mode_switch()
+                    if msg.buttons[2] == 0 and self.prev_button_2 == 1:
+                        self.mode_switch()
+                        
+                    self.prev_button_2 = msg.buttons[2]
+                        
+                    if msg.buttons[3]:
+                        self.automatic = not self.automatic
+
+                    if msg.buttons[4]:
+                        pass
+
+                    if msg.buttons[5]:
+                        pass
+
+                    if msg.buttons[6]:
+                        pass
+
+                    if msg.buttons[7]:
+                        pass
                     
-                self.prev_button_2 = msg.buttons[2]
+                    if msg.buttons[8]:
+                        # button 8 pressed, send robot home
+                        self.run = False
+                        self.send_joint_speeds_command(np.zeros(7))
+                        self.send_joint_angles(self.home_array)
+                        rospy.loginfo("Button 8 pressed: sending robot to starting position")
+                        self.run = True
+
+                    if msg.buttons[9]:
+                        pass
+
+                    if msg.buttons[10]:
+                        pass
+                        
+                    if msg.buttons[11]:
+                        pass
+                elif self.mode == DEPLOYMODE_A: # flight controller joystick in deploy mode where forwards == execute policy, backwards == undo joint actions
+
+                    '''
+
+                    IMPORTANT for model: 
+                    rollout model should append rows to the bottom of /tmp/kinova_action_queue.txt
+                    (controller runs them from the top)
                     
-                if msg.buttons[3]:
-                    self.automatic = not self.automatic
+                    '''
+                    self.axes_vector = [0.0] * len(msg.axes)
+                    stick = msg.axes[DEPLOY_STICK_AXIS]
+                    self.undo_held = stick < -DEPLOY_STICK_THRESHOLD
+                    self.execute_held = stick > DEPLOY_STICK_THRESHOLD
+                    if self.undo_held:
+                        clear_file(ACTION_QUEUE_PATH) # stale policy actions no longer apply after an undo
 
-                if msg.buttons[4]:
-                    pass
-
-                if msg.buttons[5]:
-                    pass
-
-                if msg.buttons[6]:
-                    pass
-
-                if msg.buttons[7]:
-                    pass
-                
-                if msg.buttons[8]:
-                    # button 8 pressed, send robot home
-                    self.run = False
-                    self.send_joint_speeds_command(np.zeros(7))
-                    self.send_joint_angles(self.home_array)
-                    rospy.loginfo("Button 8 pressed: sending robot to starting position")
-                    self.run = True
-
-                if msg.buttons[9]:
-                    pass
-
-                if msg.buttons[10]:
-                    pass
+                    MAXV_GR = 0.3
+    
+                    if msg.buttons[0]: # trigger button - close gripper
+                        self.gripper_cmd = -1 * MAXV_GR
+                    elif msg.buttons[1]: # button by thumb - open gripper
+                        self.gripper_cmd = MAXV_GR
+                    else: # both buttons 0 and 1 are zero
+                        self.gripper_cmd = 0.0
+    
+                    if msg.buttons[2] == 0 and self.prev_button_2 == 1:
+                        self.mode_switch()
+                        
+                    self.prev_button_2 = msg.buttons[2]
+                        
+                    if msg.buttons[3]:
+                        self.automatic = not self.automatic
+    
+                    if msg.buttons[4]:
+                        pass
+    
+                    if msg.buttons[5]:
+                        pass
+    
+                    if msg.buttons[6]:
+                        pass
+    
+                    if msg.buttons[7]:
+                        pass
                     
-                if msg.buttons[11]:
-                    pass
+                    if msg.buttons[8]:
+                        # button 8 pressed, send robot home
+                        self.run = False
+                        self.send_joint_speeds_command(np.zeros(7))
+                        self.send_joint_angles(self.home_array)
+                        rospy.loginfo("Button 8 pressed: sending robot to starting position")
+                        self.run = True
+    
+                    if msg.buttons[9]:
+                        pass
+    
+                    if msg.buttons[10]:
+                        pass
+                        
+                    if msg.buttons[11]:
+                        pass
 
-            elif self.joy_type == 1:
+            elif self.joy_type == 1: # xbox controller
                 MAXV_GR = 0.3
                 roll = msg.buttons[1] - msg.buttons[3]
                 self.axes_vector = [msg.axes[1], msg.axes[0], (1/(msg.axes[5]+1.1) - 1/(msg.axes[2]+1.1))/10, -msg.axes[4]/2, msg.axes[3], roll]
@@ -204,6 +270,20 @@ def gen_iris(base):
             self.undo_target = None
 
 
+        def execute_step(self):
+            '''
+            One control tick of deploy mode's forward stick: pop the top row of ACTION_QUEUE_PATH
+            (7 absolute joint degrees + gripper percent) and move there. The motion is not undo,
+            so position_log.py logs it and it can be undone later.
+            '''
+            row = pop_first_position(ACTION_QUEUE_PATH)
+            if row is None:
+                self.send_joint_speeds_command(np.zeros(KINOVA_DOF))
+                rospy.loginfo_throttle(2, "Deploy: stick forward but action queue is empty")
+                return
+            self.send_gripper_position(row[KINOVA_DOF] / 100.0)
+            self.send_joint_angles(row[:KINOVA_DOF], wait_timeout=DEPLOY_HOP_TIMEOUT_S)
+
         def inference_target_callback(self, msg):
             if len(msg.position) < KINOVA_DOF + 1:
                 rospy.logwarn_throttle(2, f"Inference: target needs {KINOVA_DOF + 1} values, got {len(msg.position)}; ignoring")
@@ -281,6 +361,10 @@ def gen_iris(base):
                     return
                 if self.undoing:
                     self.undo_end()
+
+                if self.execute_held:
+                    self.execute_step()
+                    return
 
                 if self.inference_held:
                     self.inference_step()

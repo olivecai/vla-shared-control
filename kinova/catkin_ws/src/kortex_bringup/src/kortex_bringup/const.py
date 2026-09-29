@@ -20,3 +20,14 @@ INFERENCE_MAX_STEP_DEG = 20.0            # a target farther than this from the a
 INFERENCE_DEADBAND_DEG = 0.2             # closer than this counts as arrived
 INFERENCE_GRIPPER_DEADBAND = 3.0         # re-command the gripper only when its target moves by more than this (percent)
 INFERENCE_TARGET_TIMEOUT_S = 1.0         # no fresh target for this long -> hold still
+
+DEPLOYMODE_A = 8
+CLASSIC_MODE=0
+
+# Deploy mode A (flight controller): stick forward = execute the next row of ACTION_QUEUE_PATH,
+# stick back = undo through the position log (and discard whatever is left in the queue).
+# ACTION_QUEUE_PATH rows use the position log format: 7 absolute joint degrees + gripper percent.
+ACTION_QUEUE_PATH = "/tmp/kinova_action_queue.txt"
+DEPLOY_STICK_AXIS = 1          # forward/back axis of the flight stick (forward = positive)
+DEPLOY_STICK_THRESHOLD = 0.5   # |axis| past this counts as pushed/pulled
+DEPLOY_HOP_TIMEOUT_S = 2.0     # give up waiting on one action's ACTION_END after this long

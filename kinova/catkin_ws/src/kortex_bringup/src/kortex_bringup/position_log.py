@@ -145,6 +145,39 @@ def pop_last_position(path):
     return _line_to_row(last_line)
 
 
+def pop_first_position(path):
+    '''
+    Pop (read + remove) the top row of a file -- used as a FIFO for ACTION_QUEUE_PATH, where the
+    rollout model appends action batches to the bottom and control_robot.py executes from the top.
+    Returns None if the file is missing/empty.
+    '''
+    if not os.path.exists(path):
+        return None
+    with open(path, "r+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            lines = f.readlines()
+            if not lines:
+                return None
+            first_line = lines.pop(0)
+            f.seek(0)
+            f.writelines(lines)
+            f.truncate()
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+    return _line_to_row(first_line)
+
+
+def clear_file(path):
+    '''Empty the file (creating it if missing), under the same lock the pop/push helpers use.'''
+    with open(path, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            f.truncate(0)
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
 class PositionLogNode:
     def __init__(self):
         '''
