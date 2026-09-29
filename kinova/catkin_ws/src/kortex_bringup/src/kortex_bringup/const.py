@@ -31,3 +31,8 @@ ACTION_QUEUE_PATH = "/tmp/kinova_action_queue.txt"
 DEPLOY_STICK_AXIS = 1          # forward/back axis of the flight stick (forward = positive)
 DEPLOY_STICK_THRESHOLD = 0.5   # |axis| past this counts as pushed/pulled
 DEPLOY_HOP_TIMEOUT_S = 2.0     # give up waiting on one action's ACTION_END after this long
+# Deploy mode A teleop: side to side translates the gripper, twist rotates it about a selectable tool axis.
+DEPLOY_SIDE_AXIS = 0           # left/right axis of the flight stick
+DEPLOY_TWIST_AXIS = 2          # twist axis of the flight stick
+DEPLOY_ROT_AXIS_BUTTON = 4     # press to cycle the twist's rotation axis: tool x -> y -> z
+DEPLOY_TELEOP_DEADZONE = 0.2   # |axis| below this is ignored, so forward/back pushes don't drift sideways

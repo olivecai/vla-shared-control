@@ -14,6 +14,12 @@ from std_msgs.msg import Int32MultiArray, Int16, Bool
 from const import *
 from position_log import peek_last_position, pop_last_position, pop_first_position, clear_file
 
+def deadzone(x, t):
+    # zero inside the deadzone, rescaled to still reach +-1 outside it (same as png_control.threshold)
+    if abs(x) < t:
+        return 0.0
+    return (x - np.sign(x) * t) / (1 - t)
+
 class CustomCommand():
     def __init__(self, ax, mode, trans_gain, rot_gain, wrist_gain):
         self.ax = ax
@@ -26,7 +32,7 @@ def gen_iris(base):
     class IrisRecord(base):
         def __init__(self):
             super(IrisRecord, self).__init__(None)
-            self.mode = CLASSIC_MODE # modes for control # 0 == CLASSIC_MODE record/teleop mode, 8 == DEPLOYMODE_A
+            self.mode = DEPLOYMODE_A # modes for control # 0 == CLASSIC_MODE record/teleop mode, 8 == DEPLOYMODE_A
             self.automatic = 0 # mode for whether it approaches automatically
             self.prev_button_2 = 0 # prev button 2 to prevent double clicks (joystick mode only)
             # Same param name/default as position_log.py's ~log_path, so both nodes agree on
@@ -63,6 +69,8 @@ def gen_iris(base):
             self.stage_pub = rospy.Publisher("/my_gen3/inference/stage", Int16, queue_size=10)
 
             self.execute_held = False # deploy mode: stick pushed forward (set by joy_callback, acted on in step)
+            self.deploy_rot_axis = 2 # deploy mode: tool axis (0=x, 1=y, 2=z) that the stick twist rotates about
+            self.prev_rot_axis_button = 0 # edge-detect DEPLOY_ROT_AXIS_BUTTON so one press = one axis change
 
         def mode_switch(self):
             self.mode = DEPLOYMODE_A if self.mode == CLASSIC_MODE else CLASSIC_MODE
@@ -76,7 +84,7 @@ def gen_iris(base):
             # print("TOOL DATA", self.tooldata)
 
         def joy_callback(self, msg):
-            self.joy_type = 1 #0 for flight controller, 1 for xbox controller
+            self.joy_type = 0 #0 for flight controller, 1 for xbox controller
             self.buttons = msg.buttons
 
             # check for gripper commands
@@ -137,7 +145,22 @@ def gen_iris(base):
                     (controller runs them from the top)
                     
                     '''
-                    self.axes_vector = [0.0] * len(msg.axes)
+                    # Side to side and twist teleop the gripper, as a Cartesian twist in the MIXED
+                    # frame (linear in base, angular in tool): side to side = base-frame lateral
+                    # translation, twist = rotation about the selected tool axis. Like png's
+                    # rotation mode, the rotation axis can be remapped: DEPLOY_ROT_AXIS_BUTTON
+                    # cycles it through tool x -> y -> z.
+                    rot_button = msg.buttons[DEPLOY_ROT_AXIS_BUTTON]
+                    if rot_button and not self.prev_rot_axis_button:
+                        self.deploy_rot_axis = (self.deploy_rot_axis + 1) % 3
+                        rospy.loginfo(f"Deploy: twist now rotates about tool {'xyz'[self.deploy_rot_axis]}")
+                    self.prev_rot_axis_button = rot_button
+
+                    twist_cmd = [0.0] * 6
+                    twist_cmd[1] = deadzone(msg.axes[DEPLOY_SIDE_AXIS], DEPLOY_TELEOP_DEADZONE)
+                    twist_cmd[3 + self.deploy_rot_axis] = deadzone(msg.axes[DEPLOY_TWIST_AXIS], DEPLOY_TELEOP_DEADZONE)
+                    self.axes_vector = twist_cmd
+
                     stick = msg.axes[DEPLOY_STICK_AXIS]
                     self.undo_held = stick < -DEPLOY_STICK_THRESHOLD
                     self.execute_held = stick > DEPLOY_STICK_THRESHOLD
@@ -283,6 +306,7 @@ def gen_iris(base):
                 return
             self.send_gripper_position(row[KINOVA_DOF] / 100.0)
             self.send_joint_angles(row[:KINOVA_DOF], wait_timeout=DEPLOY_HOP_TIMEOUT_S)
+            self.prev_cv_cmd = None # so teleop's dedupe doesn't swallow its first command after this move
 
         def inference_target_callback(self, msg):
             if len(msg.position) < KINOVA_DOF + 1:
